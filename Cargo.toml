@@ -1,0 +1,38 @@
+[package]
+name = "dingtalk-stream-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "DingTalk Stream SDK for Rust"
+license = "MIT"
+authors = ["DingTalk"]
+repository = "https://github.com/open-dingtalk/dingtalk-stream-sdk-rust"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+url = "2"
+once_cell = "1"
+parking_lot = "0.12"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+
+[features]
+default = ["rustls-tls-native-roots"]
+rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
+
+[lib]
+name = "dingtalk_stream"
+path = "src/lib.rs"
+
+[[example]]
+name = "hello"
+path = "examples/hello.rs"
