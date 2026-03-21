@@ -8,8 +8,8 @@ use crate::MessageTopic;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-mod dingtalk_stream;
-pub use dingtalk_stream::*;
+mod stream_;
+pub use stream_::*;
 
 /// Client configuration
 #[derive(Debug, Clone)]
