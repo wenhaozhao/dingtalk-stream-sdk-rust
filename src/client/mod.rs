@@ -2,8 +2,6 @@
 //!
 //! The main client for connecting to DingTalk and handling messages
 
-use crate::constants::VERSION;
-
 use crate::MessageTopic;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -31,7 +29,7 @@ impl Default for ClientConfig {
         Self {
             auto_reconnect: true,
             keep_alive: true,
-            ua: format!("dingtalk-sdk-rust/{}", VERSION),
+            ua: format!("dingtalk-sdk-rust/{}", crate::VERSION),
             reconnect_interval: Duration::from_secs(10),
             keep_alive_interval: Duration::from_secs(60),
         }
