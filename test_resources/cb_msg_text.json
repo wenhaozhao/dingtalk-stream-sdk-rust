@@ -1,0 +1,22 @@
+{
+  "chatbotCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "chatbotUserId": "$:LWCP_v1:$01B/44e/ph+R21B/X+43WLnAcUVO5BKL",
+  "conversationId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "conversationType": "1",
+  "createAt": 1774080994334,
+  "isAdmin": false,
+  "msgId": "msgBjXREkdlZkfTfrIiQomjAw==",
+  "msgtype": "text",
+  "openThreadId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "robotCode": "dingf0apw4ibx5u5ktba",
+  "senderCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "senderId": "$:LWCP_v1:$gzXDEXQDiM8piyLH4HRRcg==",
+  "senderNick": "赵文浩 022-3819",
+  "senderPlatform": "Mac",
+  "senderStaffId": "032615015535634423",
+  "sessionWebhook": "https://oapi.dingtalk.com/robot/sendBySession?session=3dc9981636af125faaf72220d6242ff7",
+  "sessionWebhookExpiredTime": 1774086394522,
+  "text": {
+    "content": "hello"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "chatbotCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "chatbotUserId": "$:LWCP_v1:$01B/44e/ph+R21B/X+43WLnAcUVO5BKL",
+
+  "msgtype": "file",
+  "content": {
+    "downloadCode": "PsPvi/1l+zhLx9mFMp6GOhQ5Y6vrPUEyIZ4uLeypytpwXVxvelZZ6CupoOhrVpWBQ7U5hh92A8d8TQ279iyimynEyAIcEWSd6o36d+G874a9VpOA9yv2rWjlPr2ZERn0ZA3HdrBUWla78dkI9bEFhu5BGoRKooa2oPkaLNy35qpInn8bl86K9q32cZFJ3CIRYKgblptOG7Z1CR3TZE5M+3VkjBtXy38BIoxmldD/kxU=",
+    "fileId": "214980176385",
+    "fileName": "一种跨站脚本漏洞攻击防御方法及装置",
+    "spaceId": "28455378906"
+  },
+  "conversationId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "conversationType": "1",
+  "createAt": 1774085385298,
+  "isAdmin": false,
+  "msgId": "msgBCO626EXCHXfZoDioTCPxg==",
+
+  "openThreadId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "robotCode": "dingf0apw4ibx5u5ktba",
+  "senderCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "senderId": "$:LWCP_v1:$gzXDEXQDiM8piyLH4HRRcg==",
+  "senderNick": "赵文浩 022-3819",
+  "senderPlatform": "Mac",
+  "senderStaffId": "032615015535634423",
+  "sessionWebhook": "https://oapi.dingtalk.com/robot/sendBySession?session=3dc9981636af125faaf72220d6242ff7",
+  "sessionWebhookExpiredTime": 1774090785558
+}

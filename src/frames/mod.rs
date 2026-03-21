@@ -250,40 +250,9 @@ impl EventMessage {
     }
 }
 
-/// Callback message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CallbackMessage {
-    #[serde(rename = "specVersion")]
-    pub spec_version: Option<String>,
-    #[serde(rename = "type")]
-    pub msg_type: MsgType,
-    pub headers: Headers,
-    pub data: Option<serde_json::Value>,
-    #[serde(flatten)]
-    pub extensions: HashMap<String, serde_json::Value>,
-}
+mod callback_message;
+pub use callback_message::*;
 
-impl CallbackMessage {
-    pub fn new() -> Self {
-        Self {
-            spec_version: None,
-            msg_type: MsgType::Callback,
-            headers: Headers::new(),
-            data: None,
-            extensions: HashMap::new(),
-        }
-    }
-
-    pub fn from_stream(msg: ClientDownStream) -> Self {
-        Self {
-            spec_version: msg.spec_version,
-            msg_type: msg.msg_type,
-            headers: msg.headers,
-            data: msg.data.as_ref().and_then(|d| serde_json::from_str(d).ok()),
-            extensions: msg.extensions,
-        }
-    }
-}
 
 /// System message
 #[derive(Debug, Clone, Serialize, Deserialize)]

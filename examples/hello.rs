@@ -16,6 +16,7 @@ impl CallbackHandler for RobotMessageHandler {
     async fn process(&self, message: &CallbackMessage) -> (i32, String) {
         // Extract text from the message
         if let Some(data) = &message.data {
+            println!("{}",serde_json::to_string_pretty(&data).unwrap());
             if let Some(text_obj) = data.get("text") {
                 if let Some(content) = text_obj.get("content").and_then(|v| v.as_str()) {
                     println!("Received message: {}", content);

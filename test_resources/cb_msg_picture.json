@@ -1,0 +1,23 @@
+{
+  "chatbotCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "chatbotUserId": "$:LWCP_v1:$01B/44e/ph+R21B/X+43WLnAcUVO5BKL",
+  "content": {
+    "downloadCode": "mIofN681YE3f/+m+NntqpSkhBVXbzJynU67dC5w0IbHqPuOOPVtSALtsbDyGLuDijgWKMXcnIgmPgRWOrlUKIKVsmjhb8VBL70N4iMCi/h+ZXS65s4NhO0ZZIsaJQQ8Uoxjq7E5eWoTpQnOUDZbBN4B8DeMNd1Ve3LadiyV4jgF6FJ6LHWwccOhP1aN0vExiHt8AuBdy+YYC22IRssnxo44MRMwSVcjzsrTW2fHXkDtsguZQp1H0VQir43QvNxd5",
+    "pictureDownloadCode": "9hSK+hQyEBYgEqGyDfnb895KcSkJuo7Jl8X9zYsDnL4+A4TMpKvgviXL8Pql+KBmZDTtLB2vFFQzrqiXlHP4NLkY1AYonoSjo66WMYfL3x2r4yMVrrzCJN3T/lMtuIaBrBpzl413PWVogVKWuGXBgV38xvI/6k+kpe3EGLiuaUbaks4ZZQwyl/YVieG402Wc9wGuC8ioaxtDWoOu+cEXBCIlpvhtxYKPB9uWXod1kQS0ThSF/MQHlfXpBB3Eu7Ba"
+  },
+  "conversationId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "conversationType": "1",
+  "createAt": 1774084180700,
+  "isAdmin": false,
+  "msgId": "msgmJpewjjmDF5LPJdRs9n/ZA==",
+  "msgtype": "picture",
+  "openThreadId": "cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=",
+  "robotCode": "dingf0apw4ibx5u5ktba",
+  "senderCorpId": "dinge19e25c0b3f73fd635c2f4657eb6378f",
+  "senderId": "$:LWCP_v1:$gzXDEXQDiM8piyLH4HRRcg==",
+  "senderNick": "赵文浩 022-3819",
+  "senderPlatform": "Mac",
+  "senderStaffId": "032615015535634423",
+  "sessionWebhook": "https://oapi.dingtalk.com/robot/sendBySession?session=3dc9981636af125faaf72220d6242ff7",
+  "sessionWebhookExpiredTime": 1774089580936
+}
