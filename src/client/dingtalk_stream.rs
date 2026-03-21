@@ -1,76 +1,18 @@
-//! DingTalk Stream Client
-//!
-//! The main client for connecting to DingTalk and handling messages
-
-use crate::constants::{GATEWAY_URL, GET_TOKEN_URL, VERSION};
-use crate::credential::Credential;
-use crate::frames::{AckMessage, DownStreamMessage, DownStreamMessageData};
-use crate::handlers::{CallbackHandler, EventHandler, SystemHandler};
+use crate::client::{AccessTokenCache, AccessTokenResponse, ConnectionResponse, Subscription};
+use crate::frames::DownStreamMessageData;
 use crate::utils::get_local_ip;
-
-use crate::MessageTopic;
+use crate::{
+    AckMessage, CallbackHandler, ClientConfig, Credential, DownStreamMessage, EventHandler,
+    MessageTopic, SystemHandler, GATEWAY_URL, GET_TOKEN_URL,
+};
 use futures_util::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
-
-/// Client configuration
-#[derive(Debug, Clone)]
-pub struct ClientConfig {
-    /// Whether to enable auto-reconnect
-    pub auto_reconnect: bool,
-    /// Whether to keep alive the connection
-    pub keep_alive: bool,
-    /// User agent string
-    pub ua: String,
-    /// Reconnect interval
-    pub reconnect_interval: Duration,
-    /// Keep alive interval
-    pub keep_alive_interval: Duration,
-}
-
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self {
-            auto_reconnect: true,
-            keep_alive: true,
-            ua: format!("dingtalk-sdk-rust/{}", VERSION),
-            reconnect_interval: Duration::from_secs(10),
-            keep_alive_interval: Duration::from_secs(60),
-        }
-    }
-}
-
-/// Subscription topic
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Subscription {
-    /// Message type: EVENT or CALLBACK
-    pub topic: MessageTopic,
-    /// Topic path
-    #[serde(rename = "type")]
-    pub sub_type: String,
-}
-
-/// Connection response from gateway
-#[derive(Debug, Deserialize)]
-pub struct ConnectionResponse {
-    pub endpoint: String,
-    pub ticket: String,
-}
-
-/// Access token response
-#[derive(Debug, Deserialize)]
-pub struct AccessTokenResponse {
-    #[serde(rename = "accessToken")]
-    pub access_token: String,
-    #[serde(rename = "expireIn")]
-    pub expire_in: i64,
-}
 
 /// DingTalk Stream Client
 pub struct DingTalkStream {
@@ -94,13 +36,6 @@ pub struct DingTalkStream {
     stop_tx: RwLock<Option<mpsc::Sender<()>>>,
     /// Access token cache
     access_token: RwLock<Option<AccessTokenCache>>,
-}
-
-/// Access token cache
-#[derive(Clone)]
-struct AccessTokenCache {
-    token: String,
-    expire_time: i64,
 }
 
 impl DingTalkStream {
@@ -146,7 +81,30 @@ impl DingTalkStream {
         self.system_handler.replace(Box::new(handler));
         self
     }
+}
 
+impl DingTalkStream {
+    /// Check if connected
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    /// Check if registered
+    pub fn is_registered(&self) -> bool {
+        self.registered.load(Ordering::Relaxed)
+    }
+
+    /// Get the credential
+    pub fn credential(&self) -> &Credential {
+        &self.credential
+    }
+
+    /// Get configuration
+    pub fn config(&self) -> &ClientConfig {
+        &self.config
+    }
+}
+impl DingTalkStream {
     /// Get access token
     pub async fn get_access_token(
         &self,
@@ -197,7 +155,8 @@ impl DingTalkStream {
 
         Ok(token_resp.access_token)
     }
-
+}
+impl DingTalkStream {
     /// Open connection to DingTalk
     pub async fn open_connection(
         &self,
@@ -237,44 +196,6 @@ impl DingTalkStream {
         info!("Connection established: {:?}", connection);
 
         Ok(connection)
-    }
-
-    /// Build subscription list
-    fn build_subscriptions(
-        &self,
-    ) -> Result<Vec<Subscription>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut topics = Vec::new();
-
-        // Add event subscription if event handler is registered
-        {
-            let handler = &self.event_handler;
-            if handler.is_some() {
-                topics.push(Subscription {
-                    sub_type: "EVENT".to_string(),
-                    topic: MessageTopic::Event("*".to_string()),
-                });
-            }
-        }
-
-        // Add callback subscriptions
-        {
-            for topic in self.callback_handlers.keys() {
-                topics.push(Subscription {
-                    sub_type: "CALLBACK".to_string(),
-                    topic: topic.clone(),
-                });
-            }
-        }
-
-        if topics.is_empty() {
-            // Default to all events if no handlers registered
-            topics.push(Subscription {
-                sub_type: "EVENT".to_string(),
-                topic: MessageTopic::Event("*".to_string()),
-            });
-        }
-
-        Ok(topics)
     }
 
     /// Connect to DingTalk WebSocket
@@ -356,6 +277,119 @@ impl DingTalkStream {
         self.connected.store(false, Ordering::SeqCst);
         self.registered.store(false, Ordering::SeqCst);
         Ok(())
+    }
+
+    /// Send a message response
+    pub async fn send(
+        &self,
+        message_id: &str,
+        data: serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let msg = serde_json::json!({
+            "code": 200,
+            "headers": {
+                "contentType": "application/json",
+                "messageId": message_id,
+            },
+            "message": "OK",
+            "data": serde_json::to_string(&data)?,
+        });
+
+        debug!("Sending message: {:?}", msg);
+
+        Ok(())
+    }
+
+    /// Send callback response (for robot messages)
+    pub async fn socket_callback_response(
+        &self,
+        message_id: &str,
+        result: serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.send(message_id, serde_json::json!({ "response": result }))
+            .await
+    }
+
+    /// Send Graph API response
+    pub async fn send_graph_api_response(
+        &self,
+        message_id: &str,
+        response: serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.send(message_id, response).await
+    }
+
+    /// Start the client and run forever (auto-reconnect)
+    pub async fn start_forever(&mut self) {
+        info!("Starting DingTalk Stream client...");
+
+        loop {
+            match self.connect().await {
+                Ok(_) => {
+                    info!("Connection closed normally");
+                }
+                Err(e) => {
+                    error!("Connection error: {}", e);
+                }
+            }
+
+            if !self.config.auto_reconnect {
+                break;
+            }
+
+            info!(
+                "Reconnecting in {} seconds...",
+                self.config.reconnect_interval.as_secs()
+            );
+            sleep(self.config.reconnect_interval).await;
+        }
+    }
+
+    /// Stop the client
+    pub async fn stop(&self) {
+        if let Some(tx) = self.stop_tx.write().await.take() {
+            let _ = tx.send(()).await;
+        }
+    }
+}
+
+impl DingTalkStream {
+    /// Build subscription list
+    fn build_subscriptions(
+        &self,
+    ) -> Result<Vec<Subscription>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut topics = Vec::new();
+
+        // Add event subscription if event handler is registered
+        {
+            let handler = &self.event_handler;
+            if handler.is_some() {
+                topics.push(Subscription {
+                    sub_type: "EVENT".to_string(),
+                    topic: MessageTopic::Event("*".to_string()),
+                });
+            }
+        }
+
+        // Add callback subscriptions
+        {
+            for topic in self.callback_handlers.keys() {
+                topics.push(Subscription {
+                    sub_type: "CALLBACK".to_string(),
+                    topic: topic.clone(),
+                });
+            }
+        }
+
+        if topics.is_empty() {
+            // Default to all events if no handlers registered
+            topics.push(Subscription {
+                sub_type: "EVENT".to_string(),
+                topic: MessageTopic::Event("*".to_string()),
+            });
+        }
+
+        Ok(topics)
     }
 
     /// Handle incoming message
@@ -500,98 +534,5 @@ impl DingTalkStream {
             warn!("Callback message without topic, skipping processing");
         }
         Ok(())
-    }
-
-    /// Send a message response
-    pub async fn send(
-        &self,
-        message_id: &str,
-        data: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let msg = serde_json::json!({
-            "code": 200,
-            "headers": {
-                "contentType": "application/json",
-                "messageId": message_id,
-            },
-            "message": "OK",
-            "data": serde_json::to_string(&data)?,
-        });
-
-        debug!("Sending message: {:?}", msg);
-
-        Ok(())
-    }
-
-    /// Send callback response (for robot messages)
-    pub async fn socket_callback_response(
-        &self,
-        message_id: &str,
-        result: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.send(message_id, serde_json::json!({ "response": result }))
-            .await
-    }
-
-    /// Send Graph API response
-    pub async fn send_graph_api_response(
-        &self,
-        message_id: &str,
-        response: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.send(message_id, response).await
-    }
-
-    /// Start the client and run forever (auto-reconnect)
-    pub async fn start_forever(&mut self) {
-        info!("Starting DingTalk Stream client...");
-
-        loop {
-            match self.connect().await {
-                Ok(_) => {
-                    info!("Connection closed normally");
-                }
-                Err(e) => {
-                    error!("Connection error: {}", e);
-                }
-            }
-
-            if !self.config.auto_reconnect {
-                break;
-            }
-
-            info!(
-                "Reconnecting in {} seconds...",
-                self.config.reconnect_interval.as_secs()
-            );
-            sleep(self.config.reconnect_interval).await;
-        }
-    }
-
-    /// Stop the client
-    pub async fn stop(&self) {
-        if let Some(tx) = self.stop_tx.write().await.take() {
-            let _ = tx.send(()).await;
-        }
-    }
-
-    /// Check if connected
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
-    }
-
-    /// Check if registered
-    pub fn is_registered(&self) -> bool {
-        self.registered.load(Ordering::Relaxed)
-    }
-
-    /// Get the credential
-    pub fn credential(&self) -> &Credential {
-        &self.credential
-    }
-
-    /// Get configuration
-    pub fn config(&self) -> &ClientConfig {
-        &self.config
     }
 }
