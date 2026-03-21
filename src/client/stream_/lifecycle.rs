@@ -3,6 +3,7 @@ use crate::utils::get_local_ip;
 use crate::{DingTalkStream, MessageTopic, GATEWAY_URL};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::Ordering;
+use anyhow::anyhow;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
@@ -46,8 +47,8 @@ impl DingTalkStream {
 
 impl DingTalkStream {
     /// Connect to DingTalk WebSocket
-    async fn connect(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let connection = self.open_connection().await?;
+    async fn connect(&mut self) -> crate::Result<()> {
+        let connection = self.open_connection().await.map_err(|err|anyhow!(err))?;
         let ws_url = format!("{}?ticket={}", connection.endpoint, connection.ticket);
 
         info!("Connecting to WebSocket: {}", ws_url);

@@ -1,4 +1,4 @@
-use crate::{CallbackMessage, EventMessage, SystemMessage};
+use crate::{CallbackMessage, EventMessage};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
@@ -8,21 +8,28 @@ pub struct DownStreamMessage {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     pub headers: MessageHeaders,
-    #[serde(flatten)]
-    pub data: Option<Data>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    pub data: Option<String>,
     #[serde(flatten)]
     pub extensions: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum Data {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Type {
     #[serde(rename = "SYSTEM")]
-    System { data: SystemMessage },
+    System,
     #[serde(rename = "EVENT")]
-    Event { data: EventMessage },
+    Event,
     #[serde(rename = "CALLBACK")]
-    Callback { data: CallbackMessage },
+    Callback,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Data {
+    System(super::callback_message::Data),
+    Event(EventMessage),
+    Callback(CallbackMessage),
 }
 
 /// Headers for all message types
@@ -124,5 +131,18 @@ impl std::fmt::Display for MessageTopic {
             MessageTopic::Event(s) => s,
         };
         write!(f, "{str}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_message_topic_deserialize() {
+        let json = include_str!("../../test_resources/client_downstream_msg.json");
+        let message: DownStreamMessage = serde_json::from_str(json).unwrap();
+        let CallbackMessage { data, .. } = CallbackMessage::try_from(message).unwrap();
+        let data = data.unwrap();
+        assert_eq!(data.msg_id.unwrap().as_str(), "msgtH7As/bwsnWfBS0olMV5tA==");
     }
 }

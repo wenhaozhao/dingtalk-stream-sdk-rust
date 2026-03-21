@@ -8,6 +8,7 @@ authors = ["DingTalk"]
 repository = "https://github.com/open-dingtalk/dingtalk-stream-sdk-rust"
 
 [dependencies]
+anyhow = { version = "1.0" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 futures-util = "0.3"

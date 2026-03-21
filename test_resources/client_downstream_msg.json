@@ -1,0 +1,13 @@
+{
+  "specVersion" : "1.0",
+  "type" : "CALLBACK",
+  "headers" : {
+    "appId" : "939c6a31-bfbb-496b-885b-76ea6d765c87",
+    "connectionId" : "0987d43e-2528-11f1-a262-3a24657c5738",
+    "contentType" : "application/json",
+    "messageId" : "bbb43a7_fc9_19ce26ebc01_2925aa2",
+    "time" : "1774098949543",
+    "topic" : "/v1.0/im/bot/messages/get"
+  },
+  "data" : "{\"senderPlatform\":\"Mac\",\"conversationId\":\"cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=\",\"chatbotCorpId\":\"dinge19e25c0b3f73fd635c2f4657eb6378f\",\"chatbotUserId\":\"$:LWCP_v1:$01B/44e/ph+R21B/X+43WLnAcUVO5BKL\",\"openThreadId\":\"cidh6ezDLHQau9V23Es/xSLNoiDDmPuN354KylQ2BaIhuM=\",\"msgId\":\"msgtH7As/bwsnWfBS0olMV5tA==\",\"senderNick\":\"赵文浩 022-3819\",\"isAdmin\":false,\"senderStaffId\":\"032615015535634423\",\"sessionWebhookExpiredTime\":1774104349531,\"createAt\":1774098949275,\"senderCorpId\":\"dinge19e25c0b3f73fd635c2f4657eb6378f\",\"conversationType\":\"1\",\"senderId\":\"$:LWCP_v1:$gzXDEXQDiM8piyLH4HRRcg==\",\"sessionWebhook\":\"https://oapi.dingtalk.com/robot/sendBySession?session=0b212be3320cc0f7d1700d406b4def6f\",\"text\":{\"content\":\"?\"},\"robotCode\":\"dingf0apw4ibx5u5ktba\",\"msgtype\":\"text\"}"
+}

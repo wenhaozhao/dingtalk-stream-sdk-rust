@@ -1,4 +1,5 @@
-use crate::MessageHeaders;
+use crate::{DownStreamMessage, MessageHeaders};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -12,6 +13,35 @@ pub struct CallbackMessage {
     pub data: Option<Data>,
     #[serde(flatten)]
     pub extensions: HashMap<String, serde_json::Value>,
+}
+
+impl TryFrom<DownStreamMessage> for CallbackMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(
+        DownStreamMessage {
+            spec_version,
+            headers,
+            r#type,
+            data,
+            extensions,
+        }: DownStreamMessage,
+    ) -> crate::Result<Self> {
+        if let super::down_stream_message::Type::Callback = r#type {
+            Ok(Self {
+                spec_version,
+                headers,
+                data: if let Some(data) = data {
+                    serde_json::from_str(&data)?
+                } else {
+                    None
+                },
+                extensions,
+            })
+        } else {
+            Err(anyhow!("expected callback message"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

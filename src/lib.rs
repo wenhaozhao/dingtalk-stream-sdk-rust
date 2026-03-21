@@ -16,12 +16,16 @@ pub mod utils;
 
 pub use client::DingTalkStream;
 pub use credential::Credential;
-pub use frames::{EventMessage, CallbackMessage, SystemMessage, AckMessage, MessageHeaders, MessageTopic};
-pub use handlers::{EventHandler, CallbackHandler, SystemHandler};
+pub use frames::{
+    AckMessage, CallbackMessage, EventMessage, MessageHeaders, MessageTopic, SystemMessage,
+};
+pub use handlers::{CallbackHandler, EventHandler, SystemHandler};
 
 // Re-export for convenience
 pub use client::ClientConfig;
 pub use frames::DownStreamMessage;
+
+pub type Result<T, E = anyhow::Error> = anyhow::Result<T, E>;
 
 /// The DingTalk gateway URL for opening connections
 pub const GATEWAY_URL: &str = "https://api.dingtalk.com/v1.0/gateway/connections/open";

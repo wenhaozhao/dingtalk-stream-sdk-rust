@@ -3,43 +3,27 @@
 //! Contains all message types and structures for communication with DingTalk
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
+mod down_stream_message;
+pub use down_stream_message::{
+    Data as DownStreamMessageData, DownStreamMessage, MessageHeaders, MessageTopic,
+    Type as MessageType,
+};
+
+mod system_message;
+pub use system_message::{
+    SystemMessage,
+};
+mod event_message;
+pub use event_message::{
+    EventMessage,
+};
 mod callback_message;
 pub use callback_message::{
     CallbackMessage, Data as CallbackMessageData, File as CallbackMessagePayloadFile,
     Payload as CallbackMessagePayload, Picture as CallbackMessagePayloadPicture,
     RichText as CallbackMessagePayloadRichText, Text as CallbackMessagePayloadText,
 };
-
-mod down_stream_message;
-pub use down_stream_message::{
-    Data as DownStreamMessageData, DownStreamMessage, MessageHeaders, MessageTopic,
-};
-
-/// Event message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventMessage {
-    #[serde(rename = "specVersion")]
-    pub spec_version: Option<String>,
-    #[serde(rename = "type")]
-    pub headers: MessageHeaders,
-    pub data: Option<serde_json::Value>,
-    #[serde(flatten)]
-    pub extensions: HashMap<String, serde_json::Value>,
-}
-
-/// System message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemMessage {
-    #[serde(rename = "specVersion")]
-    pub spec_version: Option<String>,
-    #[serde(rename = "type")]
-    pub headers: MessageHeaders,
-    pub data: Option<serde_json::Value>,
-    #[serde(flatten)]
-    pub extensions: HashMap<String, serde_json::Value>,
-}
 
 /// ACK message status codes
 pub mod ack_status {

@@ -161,7 +161,7 @@ impl DingTalkStream {
         &self,
         message_id: &str,
         data: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> crate::Result<()> {
         let msg = serde_json::json!({
             "code": 200,
             "headers": {
@@ -182,7 +182,7 @@ impl DingTalkStream {
         &self,
         message_id: &str,
         result: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> crate::Result<()> {
         self.send(message_id, serde_json::json!({ "response": result }))
             .await
     }
@@ -192,7 +192,7 @@ impl DingTalkStream {
         &self,
         message_id: &str,
         response: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> crate::Result<()> {
         self.send(message_id, response).await
     }
 }
