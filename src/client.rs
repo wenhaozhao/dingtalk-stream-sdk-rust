@@ -2,27 +2,25 @@
 //!
 //! The main client for connecting to DingTalk and handling messages
 
+use crate::constants::{GATEWAY_URL, GET_TOKEN_URL, TOPIC_ROBOT, VERSION};
 use crate::credential::Credential;
 use crate::frames::{
-    AckMessage, CallbackMessage, ClientDownStream, EventMessage, SystemMessage, RobotMessage,
-    TOPIC_CONNECTED, TOPIC_DISCONNECT, TOPIC_KEEPALIVE, TOPIC_PING, TOPIC_REGISTERED,
-    MSG_TYPE_EVENT, MSG_TYPE_CALLBACK, MSG_TYPE_SYSTEM,
+    AckMessage, CallbackMessage, ClientDownStream, EventMessage, RobotMessage, SystemMessage,
 };
 use crate::handlers::{CallbackHandler, EventHandler, SystemHandler};
-use crate::constants::{GATEWAY_URL, GET_TOKEN_URL, TOPIC_ROBOT, VERSION};
 use crate::utils::get_local_ip;
 
+use crate::{MsgType, SystemTopic};
 use async_trait::async_trait;
-use futures_util::{StreamExt, SinkExt};
-use parking_lot::RwLock;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{error, info, warn, debug};
+use tracing::{debug, error, info, warn};
 
 /// Client configuration
 #[derive(Debug, Clone)]
@@ -33,23 +31,20 @@ pub struct ClientConfig {
     pub keep_alive: bool,
     /// User agent string
     pub ua: String,
-    /// Debug mode
-    pub debug: bool,
-    /// Reconnect interval in seconds
-    pub reconnect_interval: u64,
-    /// Keep alive interval in seconds
-    pub keep_alive_interval: u64,
+    /// Reconnect interval
+    pub reconnect_interval: Duration,
+    /// Keep alive interval
+    pub keep_alive_interval: Duration,
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             auto_reconnect: true,
-            keep_alive: false,
+            keep_alive: true,
             ua: format!("dingtalk-sdk-rust/{}", VERSION),
-            debug: false,
-            reconnect_interval: 10,
-            keep_alive_interval: 60,
+            reconnect_interval: Duration::from_secs(10),
+            keep_alive_interval: Duration::from_secs(60),
         }
     }
 }
@@ -58,7 +53,7 @@ impl Default for ClientConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
     /// Message type: EVENT or CALLBACK
-    pub topic: String,
+    pub topic: SystemTopic,
     /// Topic path
     #[serde(rename = "type")]
     pub sub_type: String,
@@ -87,17 +82,17 @@ pub struct DingTalkStream {
     /// Client configuration
     config: ClientConfig,
     /// Event handler
-    event_handler: Arc<RwLock<Option<Box<dyn EventHandler>>>>,
+    event_handler: Option<Box<dyn EventHandler>>,
     /// Callback handlers mapped by topic
-    callback_handlers: Arc<RwLock<HashMap<String, Box<dyn CallbackHandler>>>>,
+    callback_handlers: HashMap<SystemTopic, Box<dyn CallbackHandler>>,
     /// System handler
-    system_handler: Arc<RwLock<Option<Box<dyn SystemHandler>>>>,
+    system_handler: Option<Box<dyn SystemHandler>>,
     /// WebSocket URL
-    ws_url: RwLock<Option<String>>,
+    ws_url: Option<String>,
     /// Whether connected
-    connected: RwLock<bool>,
+    connected: AtomicBool,
     /// Whether registered
-    registered: RwLock<bool>,
+    registered: AtomicBool,
     /// Stop signal sender
     stop_tx: RwLock<Option<mpsc::Sender<()>>>,
     /// Access token cache
@@ -114,18 +109,7 @@ struct AccessTokenCache {
 impl DingTalkStream {
     /// Create a new DingTalk Stream client
     pub fn new(credential: Credential) -> Self {
-        Self {
-            credential,
-            config: ClientConfig::default(),
-            event_handler: Arc::new(RwLock::new(None)),
-            callback_handlers: Arc::new(RwLock::new(HashMap::new())),
-            system_handler: Arc::new(RwLock::new(None)),
-            ws_url: RwLock::new(None),
-            connected: RwLock::new(false),
-            registered: RwLock::new(false),
-            stop_tx: RwLock::new(None),
-            access_token: RwLock::new(None),
-        }
+        Self::with_config(credential, ClientConfig::default())
     }
 
     /// Create with custom configuration
@@ -133,46 +117,46 @@ impl DingTalkStream {
         Self {
             credential,
             config,
-            event_handler: Arc::new(RwLock::new(None)),
-            callback_handlers: Arc::new(RwLock::new(HashMap::new())),
-            system_handler: Arc::new(RwLock::new(None)),
-            ws_url: RwLock::new(None),
-            connected: RwLock::new(false),
-            registered: RwLock::new(false),
-            stop_tx: RwLock::new(None),
-            access_token: RwLock::new(None),
+            event_handler: Default::default(),
+            callback_handlers: Default::default(),
+            system_handler: Default::default(),
+            ws_url: Default::default(),
+            connected: Default::default(),
+            registered: Default::default(),
+            stop_tx: Default::default(),
+            access_token: Default::default(),
         }
     }
 
-    /// Set debug mode
-    pub fn with_debug(mut self, debug: bool) -> Self {
-        self.config.debug = debug;
+    /// Register an event handler
+    pub fn register_event_handler<H: EventHandler + 'static>(&mut self, handler: H) -> &mut Self {
+        self.event_handler.replace(Box::new(handler));
         self
     }
 
-    /// Register an event handler
-    pub fn register_event_handler<H: EventHandler + 'static>(&self, handler: H) {
-        let mut guard = self.event_handler.write();
-        *guard = Some(Box::new(handler));
-    }
-
     /// Register a callback handler for a specific topic
-    pub fn register_callback_handler<H: CallbackHandler + 'static>(&self, topic: &str, handler: H) {
-        let mut handlers = self.callback_handlers.write();
-        handlers.insert(topic.to_string(), Box::new(handler));
+    pub fn register_callback_handler<H: CallbackHandler + 'static>(mut self, handler: H) -> Self {
+        let topic = handler.topic().clone();
+        self.callback_handlers.insert(topic, Box::new(handler));
+        self
     }
 
     /// Register a system handler
-    pub fn register_system_handler<H: SystemHandler + 'static>(&self, handler: H) {
-        let mut guard = self.system_handler.write();
-        *guard = Some(Box::new(handler));
+    pub async fn register_system_handler<H: SystemHandler + 'static>(
+        &mut self,
+        handler: H,
+    ) -> &mut Self {
+        self.system_handler.replace(Box::new(handler));
+        self
     }
 
     /// Get access token
-    pub async fn get_access_token(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_access_token(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Check cached token
         {
-            let cache = self.access_token.read();
+            let cache = self.access_token.read().await;
             if let Some(ref cache) = *cache {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -202,10 +186,12 @@ impl DingTalkStream {
         let expire_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
-            .unwrap_or(0) + token_resp.expire_in - 300; // 5 min buffer
+            .unwrap_or(0)
+            + token_resp.expire_in
+            - 300; // 5 min buffer
 
         {
-            let mut cache = self.access_token.write();
+            let mut cache = self.access_token.write().await;
             *cache = Some(AccessTokenCache {
                 token: token_resp.access_token.clone(),
                 expire_time,
@@ -216,7 +202,9 @@ impl DingTalkStream {
     }
 
     /// Open connection to DingTalk
-    pub async fn open_connection(&self) -> Result<ConnectionResponse, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn open_connection(
+        &self,
+    ) -> Result<ConnectionResponse, Box<dyn std::error::Error + Send + Sync>> {
         let subscriptions = self.build_subscriptions()?;
 
         let client = reqwest::Client::new();
@@ -230,10 +218,8 @@ impl DingTalkStream {
             "localIp": local_ip,
         });
 
-        if self.config.debug {
-            info!("Opening connection to {}", GATEWAY_URL);
-            debug!("Request body: {:?}", request_body);
-        }
+        info!("Opening connection to {}", GATEWAY_URL);
+        debug!("Request body: {:?}", request_body);
 
         let response = client
             .post(GATEWAY_URL)
@@ -251,32 +237,31 @@ impl DingTalkStream {
 
         let connection: ConnectionResponse = response.json().await?;
 
-        if self.config.debug {
-            info!("Connection established: {:?}", connection);
-        }
+        info!("Connection established: {:?}", connection);
 
         Ok(connection)
     }
 
     /// Build subscription list
-    fn build_subscriptions(&self) -> Result<Vec<Subscription>, Box<dyn std::error::Error + Send + Sync>> {
+    fn build_subscriptions(
+        &self,
+    ) -> Result<Vec<Subscription>, Box<dyn std::error::Error + Send + Sync>> {
         let mut topics = Vec::new();
 
         // Add event subscription if event handler is registered
         {
-            let guard = self.event_handler.read();
-            if guard.is_some() {
+            let handler = &self.event_handler;
+            if handler.is_some() {
                 topics.push(Subscription {
                     sub_type: "EVENT".to_string(),
-                    topic: "*".to_string(),
+                    topic: SystemTopic::Event("*".to_string()),
                 });
             }
         }
 
         // Add callback subscriptions
         {
-            let handlers = self.callback_handlers.read();
-            for topic in handlers.keys() {
+            for topic in self.callback_handlers.keys() {
                 topics.push(Subscription {
                     sub_type: "CALLBACK".to_string(),
                     topic: topic.clone(),
@@ -288,7 +273,7 @@ impl DingTalkStream {
             // Default to all events if no handlers registered
             topics.push(Subscription {
                 sub_type: "EVENT".to_string(),
-                topic: "*".to_string(),
+                topic: SystemTopic::Event("*".to_string()),
             });
         }
 
@@ -296,21 +281,19 @@ impl DingTalkStream {
     }
 
     /// Connect to DingTalk WebSocket
-    pub async fn connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn connect(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let connection = self.open_connection().await?;
         let ws_url = format!("{}?ticket={}", connection.endpoint, connection.ticket);
 
-        if self.config.debug {
-            info!("Connecting to WebSocket: {}", ws_url);
-        }
+        info!("Connecting to WebSocket: {}", ws_url);
 
-        *self.ws_url.write() = Some(ws_url.clone());
+        self.ws_url.replace(ws_url.clone());
 
         // Connect to WebSocket
         let (ws_stream, _) = connect_async(&ws_url).await?;
         let (mut write, mut read) = ws_stream.split();
 
-        *self.connected.write() = true;
+        self.connected.store(true, Ordering::SeqCst);
         info!("Connected to DingTalk WebSocket");
 
         // Create channel for sending messages
@@ -319,8 +302,12 @@ impl DingTalkStream {
         // Spawn task to forward messages to WebSocket
         let write_task = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if write.send(Message::Text(msg.into())).await.is_err() {
-                    break;
+                match write.send(Message::Text(msg.into())).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Failed to send message to WebSocket: {}", e);
+                        break;
+                    }
                 }
             }
         });
@@ -331,12 +318,19 @@ impl DingTalkStream {
             let tx_clone = tx.clone();
             tokio::spawn(async move {
                 loop {
-                    sleep(Duration::from_secs(keep_alive_interval)).await;
+                    sleep(keep_alive_interval).await;
                     let ping = serde_json::json!({
                         "code": 200,
                         "message": "ping"
                     });
-                    let _ = tx_clone.send(ping.to_string()).await;
+                    match serde_json::to_string(&ping) {
+                        Ok(ping) => {
+                            let _ = tx_clone.send(ping).await;
+                        }
+                        Err(err) => {
+                            error!("write ping to json failed: {err}")
+                        }
+                    }
                 }
             });
         }
@@ -361,38 +355,32 @@ impl DingTalkStream {
                 _ => {}
             }
         }
-
         write_task.abort();
-        *self.connected.write() = false;
-        *self.registered.write() = false;
-
+        self.connected.store(false, Ordering::SeqCst);
+        self.registered.store(false, Ordering::SeqCst);
         Ok(())
     }
 
     /// Handle incoming message
     async fn handle_message(
-        &self,
+        &mut self,
         text: &str,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let msg: ClientDownStream = serde_json::from_str(text)?;
-
-        if self.config.debug {
-            debug!("Received message: {:?}", msg);
-        }
-
-        match msg.msg_type.as_str() {
-            MSG_TYPE_SYSTEM => {
+        debug!("Received message: {:?}", msg);
+        match msg.msg_type{
+            MsgType::System => {
                 self.handle_system(msg, tx).await?;
             }
-            MSG_TYPE_EVENT => {
+            MsgType::Event => {
                 self.handle_event(msg, tx).await?;
             }
-            MSG_TYPE_CALLBACK => {
+            MsgType::Callback => {
                 self.handle_callback(msg, tx).await?;
             }
-            _ => {
-                warn!("Unknown message type: {}", msg.msg_type);
+            other => {
+                warn!("Unknown message type: {}", other);
             }
         }
 
@@ -401,52 +389,49 @@ impl DingTalkStream {
 
     /// Handle system message
     async fn handle_system(
-        &self,
+        &mut self,
         msg: ClientDownStream,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let topic = msg.headers.topic.as_deref().unwrap_or("");
-
-        match topic {
-            TOPIC_CONNECTED => {
-                info!("Connection established");
+        if let Some(topic) = &msg.headers.topic {
+            match topic {
+                SystemTopic::Connected => {
+                    info!("Connection established");
+                }
+                SystemTopic::Registered => {
+                    self.registered.store(true, Ordering::SeqCst);
+                    info!("Registered successfully");
+                }
+                SystemTopic::Disconnect => {
+                    self.connected.store(false, Ordering::SeqCst);
+                    self.registered.store(false, Ordering::SeqCst);
+                    info!("Disconnected by server");
+                }
+                SystemTopic::KeepAlive => {
+                    // Heartbeat received
+                }
+                SystemTopic::Ping => {
+                    // Respond to ping
+                    let response = serde_json::json!({
+                        "code": 200,
+                        "headers": msg.headers,
+                        "message": "OK",
+                        "data": msg.data,
+                    });
+                    let _ = tx.send(response.to_string()).await;
+                }
+                SystemTopic::Event(_) => {}
             }
-            TOPIC_REGISTERED => {
-                *self.registered.write() = true;
-                info!("Registered successfully");
+            {
+                // Call custom system handler if registered
+                if let Some(handler) = &self.system_handler {
+                    let system_msg = SystemMessage::from_stream(msg);
+                    let _ = handler.process(&system_msg).await;
+                }
             }
-            TOPIC_DISCONNECT => {
-                *self.connected.write() = false;
-                *self.registered.write() = false;
-                info!("Disconnected by server");
-            }
-            TOPIC_KEEPALIVE => {
-                // Heartbeat received
-            }
-            TOPIC_PING => {
-                // Respond to ping
-                let response = serde_json::json!({
-                    "code": 200,
-                    "headers": msg.headers,
-                    "message": "OK",
-                    "data": msg.data,
-                });
-                let _ = tx.send(response.to_string()).await;
-            }
-            _ => {
-                warn!("Unknown system topic: {}", topic);
-            }
+        } else {
+            warn!("System message without topic, skipping processing");
         }
-
-        // Call custom system handler if registered
-        {
-            let guard = self.system_handler.read();
-            if let Some(ref handler) = *guard {
-                let system_msg = SystemMessage::from_stream(msg);
-                let _ = handler.process(&system_msg).await;
-            }
-        }
-
         Ok(())
     }
 
@@ -457,21 +442,15 @@ impl DingTalkStream {
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let event_msg = EventMessage::from_stream(msg);
-
         // Call event handler
-        let guard = self.event_handler.read();
-        if let Some(ref handler) = *guard {
+        if let Some(ref handler) = &self.event_handler {
             let (code, response_msg) = handler.process(&event_msg).await;
             let ack = AckMessage::ok(&response_msg)
                 .with_message_id(event_msg.headers.message_id.clone().unwrap_or_default())
                 .with_content_type("application/json");
             let _ = tx.send(serde_json::to_string(&ack)?).await;
-
-            if self.config.debug {
-                debug!("Event processed with code: {}", code);
-            }
+            debug!("Event processed with code: {}", code);
         }
-
         Ok(())
     }
 
@@ -481,32 +460,33 @@ impl DingTalkStream {
         msg: ClientDownStream,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let topic = msg.headers.topic.clone().unwrap_or_default();
-        let topic_str = topic.as_str();
-        let callback_msg = CallbackMessage::from_stream(msg);
-
-        // Find handler for this topic
-        let handlers = self.callback_handlers.read();
-        if let Some(handler) = handlers.get(topic_str) {
-            let (code, response_msg) = handler.process(&callback_msg).await;
-            let ack = AckMessage::ok(&response_msg)
-                .with_message_id(callback_msg.headers.message_id.clone().unwrap_or_default())
-                .with_content_type("application/json")
-                .with_data(serde_json::json!({ "response": response_msg }));
-            let _ = tx.send(serde_json::to_string(&ack)?).await;
-
-            if self.config.debug {
+        if let Some(topic) = &msg.headers.topic {
+            // Find handler for this topic
+            if let Some(handler) = self.callback_handlers.get(topic) {
+                let callback_msg = CallbackMessage::from_stream(msg);
+                let (code, response_msg) = handler.process(&callback_msg).await;
+                let ack = AckMessage::ok(&response_msg)
+                    .with_message_id(callback_msg.headers.message_id.clone().unwrap_or_default())
+                    .with_content_type("application/json")
+                    .with_data(serde_json::json!({ "response": response_msg }));
+                let ack_json = serde_json::to_string(&ack)?;
+                let _ = tx.send(ack_json).await;
                 debug!("Callback processed with code: {}", code);
+            } else {
+                warn!("No handler registered for topic: {}", topic);
             }
         } else {
-            warn!("No handler registered for topic: {}", topic);
+            warn!("Callback message without topic, skipping processing");
         }
-
         Ok(())
     }
 
     /// Send a message response
-    pub async fn send(&self, message_id: &str, data: serde_json::Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn send(
+        &self,
+        message_id: &str,
+        data: serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let msg = serde_json::json!({
             "code": 200,
             "headers": {
@@ -517,9 +497,7 @@ impl DingTalkStream {
             "data": serde_json::to_string(&data)?,
         });
 
-        if self.config.debug {
-            debug!("Sending message: {:?}", msg);
-        }
+        debug!("Sending message: {:?}", msg);
 
         Ok(())
     }
@@ -530,7 +508,8 @@ impl DingTalkStream {
         message_id: &str,
         result: serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.send(message_id, serde_json::json!({ "response": result })).await
+        self.send(message_id, serde_json::json!({ "response": result }))
+            .await
     }
 
     /// Send Graph API response
@@ -543,7 +522,7 @@ impl DingTalkStream {
     }
 
     /// Start the client and run forever (auto-reconnect)
-    pub async fn start_forever(&self) {
+    pub async fn start_forever(&mut self) {
         info!("Starting DingTalk Stream client...");
 
         loop {
@@ -560,26 +539,29 @@ impl DingTalkStream {
                 break;
             }
 
-            info!("Reconnecting in {} seconds...", self.config.reconnect_interval);
-            sleep(Duration::from_secs(self.config.reconnect_interval)).await;
+            info!(
+                "Reconnecting in {} seconds...",
+                self.config.reconnect_interval.as_secs()
+            );
+            sleep(self.config.reconnect_interval).await;
         }
     }
 
     /// Stop the client
     pub async fn stop(&self) {
-        if let Some(tx) = self.stop_tx.write().take() {
+        if let Some(tx) = self.stop_tx.write().await.take() {
             let _ = tx.send(()).await;
         }
     }
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        *self.connected.read()
+        self.connected.load(Ordering::Relaxed)
     }
 
     /// Check if registered
     pub fn is_registered(&self) -> bool {
-        *self.registered.read()
+        self.registered.load(Ordering::Relaxed)
     }
 
     /// Get the credential
@@ -594,11 +576,15 @@ impl DingTalkStream {
 }
 
 /// Simple robot handler for convenience
-pub struct RobotMessageHandler;
+pub struct RobotMessageHandler {
+    topic: SystemTopic,
+}
 
 impl RobotMessageHandler {
     pub fn new() -> Self {
-        Self
+        Self {
+            topic: SystemTopic::Event(TOPIC_ROBOT.into()),
+        }
     }
 }
 
@@ -616,8 +602,8 @@ impl CallbackHandler for RobotMessageHandler {
         (404, "not implement".to_string())
     }
 
-    fn topic(&self) -> &str {
-        TOPIC_ROBOT
+    fn topic(&self) -> &SystemTopic {
+        &self.topic
     }
 }
 

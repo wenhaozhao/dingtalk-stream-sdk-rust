@@ -5,7 +5,7 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use dingtalk_stream::{DingTalkStream, Credential, CallbackHandler, EventHandler};
+//! use dingtalk_stream::{DingTalkStream, Credential, CallbackHandler, EventHandler, RobotHandler};
 //! use serde_json::json;
 //!
 //! #[tokio::main]
@@ -15,10 +15,9 @@
 //!         "your-client-secret".to_string(),
 //!     );
 //!
-//!     let mut client = DingTalkStream::new(credential);
-//!
-//!     // Register robot message callback handler
-//!     client.register_callback_handler("/v1.0/im/bot/messages/get", RobotHandler);
+//!     let mut client = DingTalkStream::new(credential)
+//!         // Register robot message callback handler
+//!         .register_callback_handler(RobotHandler::new());
 //!
 //!     // Start the client
 //!     client.start_forever().await;
@@ -34,7 +33,7 @@ pub mod utils;
 
 pub use client::DingTalkStream;
 pub use credential::Credential;
-pub use frames::{EventMessage, CallbackMessage, SystemMessage, AckMessage, Headers, RobotMessage};
+pub use frames::{EventMessage, CallbackMessage, SystemMessage, AckMessage, Headers, RobotMessage, MsgType, SystemTopic};
 pub use handlers::{EventHandler, CallbackHandler, SystemHandler, RobotHandler, GraphHandler};
 pub use constants::*;
 

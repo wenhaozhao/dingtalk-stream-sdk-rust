@@ -2,15 +2,14 @@
 //!
 //! This example demonstrates how to create a simple DingTalk bot that responds to messages.
 
-use dingtalk_stream::{
-    Credential, DingTalkStream, CallbackHandler, CallbackMessage,
-    TOPIC_ROBOT,
-};
 use async_trait::async_trait;
+use dingtalk_stream::{
+    CallbackHandler, CallbackMessage, Credential, DingTalkStream, SystemTopic, TOPIC_ROBOT,
+};
 use std::env;
 
 /// Custom handler for robot messages
-struct RobotMessageHandler;
+struct RobotMessageHandler(SystemTopic);
 
 #[async_trait]
 impl CallbackHandler for RobotMessageHandler {
@@ -20,7 +19,6 @@ impl CallbackHandler for RobotMessageHandler {
             if let Some(text_obj) = data.get("text") {
                 if let Some(content) = text_obj.get("content").and_then(|v| v.as_str()) {
                     println!("Received message: {}", content);
-
                     // You would typically send a response back here
                     // For now, just echo the message
                     return (200, format!("Echo: {}", content));
@@ -30,8 +28,8 @@ impl CallbackHandler for RobotMessageHandler {
         (404, "not implement".to_string())
     }
 
-    fn topic(&self) -> &str {
-        TOPIC_ROBOT
+    fn topic(&self) -> &SystemTopic {
+        &self.0
     }
 }
 
@@ -41,8 +39,8 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // Get credentials from environment variables
-    let client_id = env::var("DINGTALK_CLIENT_ID")
-        .expect("DINGTALK_CLIENT_ID environment variable not set");
+    let client_id =
+        env::var("DINGTALK_CLIENT_ID").expect("DINGTALK_CLIENT_ID environment variable not set");
     let client_secret = env::var("DINGTALK_CLIENT_SECRET")
         .expect("DINGTALK_CLIENT_SECRET environment variable not set");
 
@@ -53,11 +51,10 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let client = DingTalkStream::new(credential).with_debug(true);
-
-    // Register robot message handler
-    client.register_callback_handler(TOPIC_ROBOT, RobotMessageHandler);
-
+    let mut client = DingTalkStream::new(credential)
+        .register_callback_handler(RobotMessageHandler(SystemTopic::Event(
+            TOPIC_ROBOT.to_string(),
+        )));
     // Start the client (will run forever with auto-reconnect)
     client.start_forever().await;
 }

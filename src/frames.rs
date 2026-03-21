@@ -2,9 +2,8 @@
 //!
 //! Contains all message types and structures for communication with DingTalk
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
-use serde::de::DeserializeOwned;
 
 /// Headers for all message types
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -20,7 +19,7 @@ pub struct Headers {
     #[serde(rename = "time", skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     #[serde(rename = "topic", skip_serializing_if = "Option::is_none")]
-    pub topic: Option<String>,
+    pub topic: Option<SystemTopic>,
     // Event fields
     #[serde(rename = "eventBornTime", skip_serializing_if = "Option::is_none")]
     pub event_born_time: Option<i64>,
@@ -59,7 +58,7 @@ pub struct ClientDownStream {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
-    pub msg_type: String,
+    pub msg_type: MsgType,
     pub headers: Headers,
     pub data: Option<String>,
     #[serde(flatten)]
@@ -68,32 +67,149 @@ pub struct ClientDownStream {
 
 impl ClientDownStream {
     /// Get the message type
-    pub fn msg_type(&self) -> &str {
+    pub fn msg_type(&self) -> &MsgType {
         &self.msg_type
     }
 
     /// Parse the data field as JSON
     pub fn parse_data<T: for<'de> Deserialize<'de>>(&self) -> Option<T> {
-        self.data.as_ref().and_then(|d| serde_json::from_str(d).ok())
+        self.data
+            .as_ref()
+            .and_then(|d| serde_json::from_str(d).ok())
     }
 }
 
-/// Event message type
+/// Message type enum for downstream messages
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MsgType {
+    Event,
+    Callback,
+    System,
+    Unknown(String),
+}
+
+impl Serialize for MsgType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let str = match self {
+            MsgType::Event => "EVENT",
+            MsgType::Callback => "CALLBACK",
+            MsgType::System => "SYSTEM",
+            MsgType::Unknown(s) => s,
+        };
+        serializer.serialize_str(str)
+    }
+}
+
+impl From<String> for MsgType {
+    fn from(s: String) -> Self {
+        let uppercase = s.to_uppercase();
+        match uppercase.as_str() {
+            "EVENT" => MsgType::Event,
+            "CALLBACK" => MsgType::Callback,
+            "SYSTEM" => MsgType::System,
+            _ => MsgType::Unknown(s),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MsgType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str = String::deserialize(deserializer)?;
+        Ok(Self::from(str))
+    }
+}
+
+impl std::fmt::Display for MsgType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            MsgType::Event => "EVENT",
+            MsgType::Callback => "CALLBACK",
+            MsgType::System => "SYSTEM",
+            MsgType::Unknown(s) => s,
+        };
+        write!(f, "{str}")
+    }
+}
+
+/// System message topic enum
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+#[serde(untagged)]
+pub enum SystemTopic {
+    #[serde(rename = "CONNECTED")]
+    Connected,
+    #[serde(rename = "REGISTERED")]
+    Registered,
+    #[serde(rename = "disconnect")]
+    Disconnect,
+    #[serde(rename = "KEEPALIVE")]
+    KeepAlive,
+    #[serde(rename = "ping")]
+    Ping,
+    Event(String),
+}
+
+impl From<String> for SystemTopic {
+    fn from(s: String) -> Self {
+        let uppercase = s.to_uppercase();
+        match uppercase.as_str() {
+            "CONNECTED" => SystemTopic::Connected,
+            "REGISTERED" => SystemTopic::Registered,
+            "DISCONNECT" => SystemTopic::Disconnect,
+            "KEEPALIVE" => SystemTopic::KeepAlive,
+            "PING" => SystemTopic::Ping,
+            _ => SystemTopic::Event(s),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SystemTopic {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str = String::deserialize(deserializer)?;
+        Ok(Self::from(str))
+    }
+}
+
+impl std::fmt::Display for SystemTopic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            SystemTopic::Connected => "CONNECTED",
+            SystemTopic::Registered => "REGISTERED",
+            SystemTopic::Disconnect => "disconnect",
+            SystemTopic::KeepAlive => "KEEPALIVE",
+            SystemTopic::Ping => "ping",
+            SystemTopic::Event(s) => s,
+        };
+        write!(f, "{str}")
+    }
+}
+
+/// Legacy constants for backwards compatibility
+#[deprecated(since = "0.2.0", note = "Use MsgType enum instead")]
 pub const MSG_TYPE_EVENT: &str = "EVENT";
-/// Callback message type
+#[deprecated(since = "0.2.0", note = "Use MsgType enum instead")]
 pub const MSG_TYPE_CALLBACK: &str = "CALLBACK";
-/// System message type
+#[deprecated(since = "0.2.0", note = "Use MsgType enum instead")]
 pub const MSG_TYPE_SYSTEM: &str = "SYSTEM";
 
-/// System message topic: connection established
+/// Legacy constants for backwards compatibility
+#[deprecated(since = "0.2.0", note = "Use SystemTopic enum instead")]
 pub const TOPIC_CONNECTED: &str = "CONNECTED";
-/// System message topic: registered
+#[deprecated(since = "0.2.0", note = "Use SystemTopic enum instead")]
 pub const TOPIC_REGISTERED: &str = "REGISTERED";
-/// System message topic: disconnect
+#[deprecated(since = "0.2.0", note = "Use SystemTopic enum instead")]
 pub const TOPIC_DISCONNECT: &str = "disconnect";
-/// System message topic: keep alive
+#[deprecated(since = "0.2.0", note = "Use SystemTopic enum instead")]
 pub const TOPIC_KEEPALIVE: &str = "KEEPALIVE";
-/// System message topic: ping
+#[deprecated(since = "0.2.0", note = "Use SystemTopic enum instead")]
 pub const TOPIC_PING: &str = "ping";
 
 /// Content type for JSON
@@ -105,7 +221,7 @@ pub struct EventMessage {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
-    pub msg_type: String,
+    pub msg_type: MsgType,
     pub headers: Headers,
     pub data: Option<serde_json::Value>,
     #[serde(flatten)]
@@ -116,7 +232,7 @@ impl EventMessage {
     pub fn new() -> Self {
         Self {
             spec_version: None,
-            msg_type: MSG_TYPE_EVENT.to_string(),
+            msg_type: MsgType::Event,
             headers: Headers::new(),
             data: None,
             extensions: HashMap::new(),
@@ -140,7 +256,7 @@ pub struct CallbackMessage {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
-    pub msg_type: String,
+    pub msg_type: MsgType,
     pub headers: Headers,
     pub data: Option<serde_json::Value>,
     #[serde(flatten)]
@@ -151,7 +267,7 @@ impl CallbackMessage {
     pub fn new() -> Self {
         Self {
             spec_version: None,
-            msg_type: MSG_TYPE_CALLBACK.to_string(),
+            msg_type: MsgType::Callback,
             headers: Headers::new(),
             data: None,
             extensions: HashMap::new(),
@@ -175,7 +291,7 @@ pub struct SystemMessage {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
-    pub msg_type: String,
+    pub msg_type: MsgType,
     pub headers: Headers,
     pub data: Option<serde_json::Value>,
     #[serde(flatten)]
@@ -186,7 +302,7 @@ impl SystemMessage {
     pub fn new() -> Self {
         Self {
             spec_version: None,
-            msg_type: MSG_TYPE_SYSTEM.to_string(),
+            msg_type: MsgType::System,
             headers: Headers::new(),
             data: None,
             extensions: HashMap::new(),

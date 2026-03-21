@@ -4,6 +4,7 @@
 
 use crate::frames::{CallbackMessage, EventMessage, SystemMessage, NOT_IMPLEMENTED, OK};
 use async_trait::async_trait;
+use crate::{SystemTopic, TOPIC_AI_GRAPH_API, TOPIC_ROBOT};
 
 /// Callback handler trait for handling callback messages
 #[async_trait]
@@ -15,7 +16,7 @@ pub trait CallbackHandler: Send + Sync {
     fn pre_start(&self) {}
 
     /// Get the topic this handler handles
-    fn topic(&self) -> &str;
+    fn topic(&self) -> &SystemTopic;
 }
 
 /// Event handler trait for handling event messages
@@ -40,13 +41,13 @@ pub trait SystemHandler: Send + Sync {
 
 /// Default no-op callback handler
 pub struct DefaultCallbackHandler {
-    topic: String,
+    topic: SystemTopic,
 }
 
 impl DefaultCallbackHandler {
     pub fn new(topic: &str) -> Self {
         Self {
-            topic: topic.to_string(),
+            topic: SystemTopic::Event(topic.to_string()),
         }
     }
 }
@@ -57,7 +58,7 @@ impl CallbackHandler for DefaultCallbackHandler {
         (NOT_IMPLEMENTED, "not implement".to_string())
     }
 
-    fn topic(&self) -> &str {
+    fn topic(&self) -> &SystemTopic {
         &self.topic
     }
 }
@@ -83,11 +84,15 @@ impl SystemHandler for DefaultSystemHandler {
 }
 
 /// Robot handler for handling robot messages
-pub struct RobotHandler;
+pub struct RobotHandler{
+    topic: SystemTopic,
+}
 
 impl RobotHandler {
     pub fn new() -> Self {
-        Self
+        Self{
+            topic: SystemTopic::Event(TOPIC_ROBOT.to_string()),
+        }
     }
 }
 
@@ -97,8 +102,8 @@ impl CallbackHandler for RobotHandler {
         (NOT_IMPLEMENTED, "not implement".to_string())
     }
 
-    fn topic(&self) -> &str {
-        "/v1.0/im/bot/messages/get"
+    fn topic(&self) -> &SystemTopic {
+        &self.topic
     }
 }
 
@@ -109,11 +114,15 @@ impl Default for RobotHandler {
 }
 
 /// AI Graph API handler
-pub struct GraphHandler;
+pub struct GraphHandler{
+    topic: SystemTopic,
+}
 
 impl GraphHandler {
     pub fn new() -> Self {
-        Self
+        Self{
+            topic: SystemTopic::Event(TOPIC_AI_GRAPH_API.to_string())
+        }
     }
 
     pub fn get_success_response(&self, payload: Option<serde_json::Value>) -> serde_json::Value {
@@ -137,8 +146,8 @@ impl CallbackHandler for GraphHandler {
         (NOT_IMPLEMENTED, "not implement".to_string())
     }
 
-    fn topic(&self) -> &str {
-        "/v1.0/graph/api/invoke"
+    fn topic(&self) -> &SystemTopic {
+        &self.topic
     }
 }
 
