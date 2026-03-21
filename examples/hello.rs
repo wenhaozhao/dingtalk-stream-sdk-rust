@@ -3,33 +3,38 @@
 //! This example demonstrates how to create a simple DingTalk bot that responds to messages.
 
 use async_trait::async_trait;
+use dingtalk_stream::frames::{CallbackMessageData, CallbackMessagePayload};
+use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
-    CallbackHandler, CallbackMessage, Credential, DingTalkStream, SystemTopic, TOPIC_ROBOT,
+    CallbackHandler, CallbackMessage, Credential, DingTalkStream, MessageTopic, TOPIC_ROBOT,
 };
 use std::env;
+use std::string::ToString;
 
 /// Custom handler for robot messages
-struct RobotMessageHandler(SystemTopic);
+struct RobotMessageHandler(MessageTopic);
 
 #[async_trait]
 impl CallbackHandler for RobotMessageHandler {
-    async fn process(&self, message: &CallbackMessage) -> (i32, String) {
+    async fn process(&self, message: &CallbackMessage) -> Result<Resp, Error> {
         // Extract text from the message
         if let Some(data) = &message.data {
-            println!("{}",serde_json::to_string_pretty(&data).unwrap());
-            if let Some(text_obj) = data.get("text") {
-                if let Some(content) = text_obj.get("content").and_then(|v| v.as_str()) {
-                    println!("Received message: {}", content);
-                    // You would typically send a response back here
-                    // For now, just echo the message
-                    return (200, format!("Echo: {}", content));
-                }
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            let CallbackMessageData { payload, .. } = &data;
+            if let Some(CallbackMessagePayload::Text { text }) = payload {
+                println!("Received message: {}", text.content);
+                // You would typically send a response back here
+                // For now, just echo the message
+                return Ok(Resp::Text(format!("Echo: {}", text.content)));
             }
         }
-        (404, "not implement".to_string())
+        Err(Error {
+            msg: "No text payload found".to_string(),
+            code: ErrorCode::BadRequest,
+        })
     }
 
-    fn topic(&self) -> &SystemTopic {
+    fn topic(&self) -> &MessageTopic {
         &self.0
     }
 }
@@ -52,10 +57,9 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let mut client = DingTalkStream::new(credential)
-        .register_callback_handler(RobotMessageHandler(SystemTopic::Event(
-            TOPIC_ROBOT.to_string(),
-        )));
+    let mut client = DingTalkStream::new(credential).register_callback_handler(
+        RobotMessageHandler(MessageTopic::Event(TOPIC_ROBOT.to_string())),
+    );
     // Start the client (will run forever with auto-reconnect)
     client.start_forever().await;
 }

@@ -2,16 +2,13 @@
 //!
 //! The main client for connecting to DingTalk and handling messages
 
-use crate::constants::{GATEWAY_URL, GET_TOKEN_URL, TOPIC_ROBOT, VERSION};
+use crate::constants::{GATEWAY_URL, GET_TOKEN_URL, VERSION};
 use crate::credential::Credential;
-use crate::frames::{
-    AckMessage, CallbackMessage, ClientDownStream, EventMessage, RobotMessage, SystemMessage,
-};
+use crate::frames::{AckMessage, DownStreamMessage, DownStreamMessageData};
 use crate::handlers::{CallbackHandler, EventHandler, SystemHandler};
 use crate::utils::get_local_ip;
 
-use crate::{MsgType, SystemTopic};
-use async_trait::async_trait;
+use crate::MessageTopic;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -53,7 +50,7 @@ impl Default for ClientConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
     /// Message type: EVENT or CALLBACK
-    pub topic: SystemTopic,
+    pub topic: MessageTopic,
     /// Topic path
     #[serde(rename = "type")]
     pub sub_type: String,
@@ -84,7 +81,7 @@ pub struct DingTalkStream {
     /// Event handler
     event_handler: Option<Box<dyn EventHandler>>,
     /// Callback handlers mapped by topic
-    callback_handlers: HashMap<SystemTopic, Box<dyn CallbackHandler>>,
+    callback_handlers: HashMap<MessageTopic, Box<dyn CallbackHandler>>,
     /// System handler
     system_handler: Option<Box<dyn SystemHandler>>,
     /// WebSocket URL
@@ -254,7 +251,7 @@ impl DingTalkStream {
             if handler.is_some() {
                 topics.push(Subscription {
                     sub_type: "EVENT".to_string(),
-                    topic: SystemTopic::Event("*".to_string()),
+                    topic: MessageTopic::Event("*".to_string()),
                 });
             }
         }
@@ -273,7 +270,7 @@ impl DingTalkStream {
             // Default to all events if no handlers registered
             topics.push(Subscription {
                 sub_type: "EVENT".to_string(),
-                topic: SystemTopic::Event("*".to_string()),
+                topic: MessageTopic::Event("*".to_string()),
             });
         }
 
@@ -367,50 +364,51 @@ impl DingTalkStream {
         text: &str,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let msg: ClientDownStream = serde_json::from_str(text)?;
-        debug!("Received message: {:?}", msg);
-        match msg.msg_type{
-            MsgType::System => {
-                self.handle_system(msg, tx).await?;
-            }
-            MsgType::Event => {
-                self.handle_event(msg, tx).await?;
-            }
-            MsgType::Callback => {
-                self.handle_callback(msg, tx).await?;
-            }
-            other => {
-                warn!("Unknown message type: {}", other);
+        debug!("Received message: {:?}", text);
+        match serde_json::from_str::<DownStreamMessage>(text) {
+            Ok(msg) => match msg.data {
+                Some(DownStreamMessageData::System { .. }) => {
+                    self.handle_system(msg, tx).await?;
+                }
+                Some(DownStreamMessageData::Event { .. }) => {
+                    self.handle_event(msg, tx).await?;
+                }
+                Some(DownStreamMessageData::Callback { .. }) => {
+                    self.handle_callback(msg, tx).await?;
+                }
+                _ => {}
+            },
+            Err(err) => {
+                error!("Failed to parse message, err: {}", err);
             }
         }
-
         Ok(())
     }
 
     /// Handle system message
     async fn handle_system(
         &mut self,
-        msg: ClientDownStream,
+        msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(topic) = &msg.headers.topic {
             match topic {
-                SystemTopic::Connected => {
+                MessageTopic::Connected => {
                     info!("Connection established");
                 }
-                SystemTopic::Registered => {
+                MessageTopic::Registered => {
                     self.registered.store(true, Ordering::SeqCst);
                     info!("Registered successfully");
                 }
-                SystemTopic::Disconnect => {
+                MessageTopic::Disconnect => {
                     self.connected.store(false, Ordering::SeqCst);
                     self.registered.store(false, Ordering::SeqCst);
                     info!("Disconnected by server");
                 }
-                SystemTopic::KeepAlive => {
+                MessageTopic::KeepAlive => {
                     // Heartbeat received
                 }
-                SystemTopic::Ping => {
+                MessageTopic::Ping => {
                     // Respond to ping
                     let response = serde_json::json!({
                         "code": 200,
@@ -420,12 +418,18 @@ impl DingTalkStream {
                     });
                     let _ = tx.send(response.to_string()).await;
                 }
-                SystemTopic::Event(_) => {}
+                MessageTopic::Event(_) => {}
             }
             {
                 // Call custom system handler if registered
                 if let Some(handler) = &self.system_handler {
-                    let system_msg = SystemMessage::from_stream(msg);
+                    let Some(data) = msg.data else {
+                        warn!("data is empty");
+                        return Ok(());
+                    };
+                    let DownStreamMessageData::System { data: system_msg } = data else {
+                        unreachable!("expected system-message")
+                    };
                     let _ = handler.process(&system_msg).await;
                 }
             }
@@ -438,13 +442,22 @@ impl DingTalkStream {
     /// Handle event message
     async fn handle_event(
         &self,
-        msg: ClientDownStream,
+        msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let event_msg = EventMessage::from_stream(msg);
         // Call event handler
         if let Some(ref handler) = &self.event_handler {
-            let (code, response_msg) = handler.process(&event_msg).await;
+            let Some(data) = msg.data else {
+                warn!("data is empty");
+                return Ok(());
+            };
+            let DownStreamMessageData::Event { data: event_msg } = data else {
+                unreachable!("expected event-message")
+            };
+            let (code, response_msg) = match handler.process(&event_msg).await {
+                Ok(result) => (200, result.to_string()),
+                Err(err) => (err.code as i32, err.msg),
+            };
             let ack = AckMessage::ok(&response_msg)
                 .with_message_id(event_msg.headers.message_id.clone().unwrap_or_default())
                 .with_content_type("application/json");
@@ -457,20 +470,28 @@ impl DingTalkStream {
     /// Handle callback message
     async fn handle_callback(
         &self,
-        msg: ClientDownStream,
+        msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(topic) = &msg.headers.topic {
+            let Some(data) = msg.data else {
+                warn!("data is empty");
+                return Ok(());
+            };
+            let DownStreamMessageData::Callback { data: callback_msg } = data else {
+                unreachable!("expected callback-message")
+            };
             // Find handler for this topic
             if let Some(handler) = self.callback_handlers.get(topic) {
-                let callback_msg = CallbackMessage::from_stream(msg);
-                let (code, response_msg) = handler.process(&callback_msg).await;
+                let (code, response_msg) = match handler.process(&callback_msg).await {
+                    Ok(result) => (200, result.to_string()),
+                    Err(err) => (err.code as i32, err.msg),
+                };
                 let ack = AckMessage::ok(&response_msg)
                     .with_message_id(callback_msg.headers.message_id.clone().unwrap_or_default())
                     .with_content_type("application/json")
                     .with_data(serde_json::json!({ "response": response_msg }));
-                let ack_json = serde_json::to_string(&ack)?;
-                let _ = tx.send(ack_json).await;
+                let _ = tx.send(serde_json::to_string(&ack)?).await;
                 debug!("Callback processed with code: {}", code);
             } else {
                 warn!("No handler registered for topic: {}", topic);
@@ -572,43 +593,5 @@ impl DingTalkStream {
     /// Get configuration
     pub fn config(&self) -> &ClientConfig {
         &self.config
-    }
-}
-
-/// Simple robot handler for convenience
-pub struct RobotMessageHandler {
-    topic: SystemTopic,
-}
-
-impl RobotMessageHandler {
-    pub fn new() -> Self {
-        Self {
-            topic: SystemTopic::Event(TOPIC_ROBOT.into()),
-        }
-    }
-}
-
-#[async_trait]
-impl CallbackHandler for RobotMessageHandler {
-    async fn process(&self, message: &CallbackMessage) -> (i32, String) {
-        // Parse robot message
-        if let Some(data) = &message.data {
-            if let Ok(robot_msg) = serde_json::from_value::<RobotMessage>(data.clone()) {
-                if let Some(text) = robot_msg.get_text() {
-                    return (200, text);
-                }
-            }
-        }
-        (404, "not implement".to_string())
-    }
-
-    fn topic(&self) -> &SystemTopic {
-        &self.topic
-    }
-}
-
-impl Default for RobotMessageHandler {
-    fn default() -> Self {
-        Self::new()
     }
 }
