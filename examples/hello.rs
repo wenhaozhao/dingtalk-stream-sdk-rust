@@ -13,6 +13,7 @@ use dingtalk_stream::{
 };
 use std::env;
 use std::string::ToString;
+use std::sync::Arc;
 
 /// Custom handler for robot messages
 struct RobotMessageHandler(MessageTopic);
@@ -77,9 +78,15 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let mut client = DingTalkStream::new(credential).register_callback_handler(
+    let mut dingtalk_stream = DingTalkStream::new(credential).register_callback_handler(
         RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())),
     );
+    let stop_tx = Arc::clone(&dingtalk_stream.stop_tx);
     // Start the client (will run forever with auto-reconnect)
-    client.start_forever().await;
+    tokio::spawn(async move {
+        dingtalk_stream.start_forever().await;
+    });
+    let _ = tokio::signal::ctrl_c().await;
+    let stop_tx = stop_tx.lock().await;
+    let _ = stop_tx.as_ref().unwrap().send(()).await;
 }

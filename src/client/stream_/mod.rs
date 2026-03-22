@@ -1,12 +1,12 @@
-use crate::client::{AccessTokenCache, AccessTokenResponse};
-use crate::{
-    CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler,
-    GET_TOKEN_URL,
-};
+use crate::client::AccessTokenCache;
+use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::{mpsc, RwLock};
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
+mod access_token;
 mod handle_message;
 mod lifecycle;
 
@@ -29,7 +29,7 @@ pub struct DingTalkStream {
     /// Whether registered
     registered: AtomicBool,
     /// Stop signal sender
-    stop_tx: RwLock<Option<mpsc::Sender<()>>>,
+    pub stop_tx: Arc<Mutex<Option<StopSignalSender>>>,
     /// Access token cache
     access_token: RwLock<Option<AccessTokenCache>>,
     http_client: reqwest::Client,
@@ -46,16 +46,27 @@ impl DingTalkStream {
         Self {
             credential,
             config,
-            event_handler: Default::default(),
-            callback_handlers: Default::default(),
-            system_handler: Default::default(),
-            ws_url: Default::default(),
-            connected: Default::default(),
-            registered: Default::default(),
+            event_handler: None,
+            callback_handlers: HashMap::default(),
+            system_handler: None,
+            ws_url: None,
+            connected: AtomicBool::new(false),
+            registered: AtomicBool::new(false),
             stop_tx: Default::default(),
             access_token: Default::default(),
-            http_client: Default::default(),
+            http_client: reqwest::Client::default(),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct StopSignalSender(pub(super) tokio::sync::mpsc::Sender<()>);
+
+impl Deref for StopSignalSender {
+    type Target = tokio::sync::mpsc::Sender<()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 impl DingTalkStream {
@@ -101,57 +112,5 @@ impl DingTalkStream {
     /// Get configuration
     pub fn config(&self) -> &ClientConfig {
         &self.config
-    }
-}
-impl DingTalkStream {
-    /// Get access token
-    pub async fn get_access_token(
-        &self,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        // Check cached token
-        {
-            let cache = self.access_token.read().await;
-            if let Some(ref cache) = *cache {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                if now < cache.expire_time {
-                    return Ok(cache.token.clone());
-                }
-            }
-        }
-
-        let response = self
-            .http_client
-            .post(GET_TOKEN_URL)
-            .json(&serde_json::json!({
-                "appKey": self.credential.client_id,
-                "appSecret": self.credential.client_secret,
-            }))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err("Failed to get access token".into());
-        }
-
-        let token_resp: AccessTokenResponse = response.json().await?;
-        let expire_time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0)
-            + token_resp.expire_in
-            - 300; // 5 min buffer
-
-        {
-            let mut cache = self.access_token.write().await;
-            *cache = Some(AccessTokenCache {
-                token: token_resp.access_token.clone(),
-                expire_time,
-            });
-        }
-
-        Ok(token_resp.access_token)
     }
 }

@@ -8,14 +8,15 @@
 //! use dingtalk_stream::{Credential, DingTalkStream, CallbackHandler, MessageTopic, TOPIC_ROBOT};
 //! use dingtalk_stream::handlers::{Resp, Error, ErrorCode};
 //! use async_trait::async_trait;
-//! use dingtalk_stream::frames::CallbackMessage;
+//! use dingtalk_stream::frames::{CallbackMessage, CallbackWebhookMessage};
+//! use tokio::sync::mpsc::Sender;
 //!
 //! // Define a handler for robot messages
 //! struct MyRobotHandler(MessageTopic);
 //!
 //! #[async_trait]
 //! impl CallbackHandler for MyRobotHandler {
-//!     async fn process(&self, message: &CallbackMessage) -> Result<Resp, Error> {
+//!     async fn process(&self, message: &CallbackMessage, cb_webhook_msg_sender: Option<Sender<CallbackWebhookMessage>>) -> Result<Resp, Error> {
 //!         // Process the message and return a response
 //!         Ok(Resp::Text("Hello from DingTalk SDK!".to_string()))
 //!     }
