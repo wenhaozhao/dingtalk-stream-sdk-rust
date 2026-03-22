@@ -1,3 +1,4 @@
+use crate::frames::DingTalkUserId;
 use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
@@ -101,7 +102,7 @@ pub struct Sender {
     #[serde(rename = "senderCorpId")]
     pub sender_corp_id: Option<String>,
     #[serde(rename = "senderStaffId")]
-    pub sender_staff_id: Option<String>,
+    pub sender_staff_id: Option<DingTalkUserId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,9 +212,7 @@ pub enum RichTextItem {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        Data, File, Payload, Picture, RichText, RichTextItem, Text,
-    };
+    use super::{Data, File, Payload, Picture, RichText, RichTextItem, Text};
 
     #[test]
     fn test_text_parse() {

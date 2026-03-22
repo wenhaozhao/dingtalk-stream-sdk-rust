@@ -4,6 +4,7 @@
 
 use crate::MessageTopic;
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 use std::time::Duration;
 
 mod stream_;
@@ -65,6 +66,16 @@ pub struct AccessTokenResponse {
 /// Access token cache
 #[derive(Clone)]
 struct AccessTokenCache {
-    token: String,
+    token: AccessToken,
     expire_time: i64,
+}
+#[derive(Clone)]
+pub struct AccessToken(String);
+
+impl Deref for AccessToken {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }

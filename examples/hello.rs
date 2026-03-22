@@ -4,8 +4,8 @@
 
 use async_trait::async_trait;
 use dingtalk_stream::frames::{
-    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage,
-    CallbackWebhookMessageContent,
+    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RobotBatchMessage,
+    UpMessageContent,
 };
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
@@ -14,6 +14,7 @@ use dingtalk_stream::{
 use std::env;
 use std::string::ToString;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Custom handler for robot messages
 struct RobotMessageHandler(MessageTopic);
@@ -36,7 +37,7 @@ impl CallbackHandler for RobotMessageHandler {
                 if let Some(sender) = cb_webhook_msg_sender {
                     let _ = sender
                         .send(CallbackWebhookMessage {
-                            content: CallbackWebhookMessageContent::Text {
+                            content: UpMessageContent::Text {
                                 text: format!("echo {}", text.content).into(),
                             },
                             at: Default::default(),
@@ -78,14 +79,30 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let mut dingtalk_stream = DingTalkStream::new(credential).register_callback_handler(
-        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())),
-    );
+    let (mut dingtalk_stream, message_sender) = DingTalkStream::new(credential)
+        .register_callback_handler(RobotMessageHandler(MessageTopic::Callback(
+            TOPIC_ROBOT.to_string(),
+        )))
+        .create_message_sender()
+        .await;
+
     let stop_tx = Arc::clone(&dingtalk_stream.stop_tx);
     // Start the client (will run forever with auto-reconnect)
     tokio::spawn(async move {
         dingtalk_stream.start_forever().await;
     });
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let _ = message_sender
+            .send(RobotBatchMessage {
+                user_ids: vec!["12345".into()],
+                content: "Hello, World!".into(),
+                send_result_cb: Some(Box::new(|result| {
+                    println!("{result:?}");
+                })),
+            })
+            .await;
+    }
     let _ = tokio::signal::ctrl_c().await;
     let stop_tx = stop_tx.lock().await;
     let _ = stop_tx.as_ref().unwrap().send(()).await;

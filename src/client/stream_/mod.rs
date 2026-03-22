@@ -1,4 +1,5 @@
 use crate::client::AccessTokenCache;
+use crate::frames::RobotBatchMessage;
 use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -9,6 +10,7 @@ use tokio::sync::{Mutex, RwLock};
 mod access_token;
 mod handle_message;
 mod lifecycle;
+mod send_message;
 
 /// DingTalk Stream Client
 pub struct DingTalkStream {
@@ -31,7 +33,7 @@ pub struct DingTalkStream {
     /// Stop signal sender
     pub stop_tx: Arc<Mutex<Option<StopSignalSender>>>,
     /// Access token cache
-    access_token: RwLock<Option<AccessTokenCache>>,
+    access_token: Arc<RwLock<Option<AccessTokenCache>>>,
     http_client: reqwest::Client,
 }
 
@@ -69,6 +71,18 @@ impl Deref for StopSignalSender {
         &self.0
     }
 }
+
+#[derive(Clone)]
+pub struct DingtalkMessageSender(pub(super) tokio::sync::mpsc::Sender<RobotBatchMessage>);
+
+impl Deref for DingtalkMessageSender {
+    type Target = tokio::sync::mpsc::Sender<RobotBatchMessage>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl DingTalkStream {
     /// Register an event handler
     pub fn register_event_handler<H: EventHandler + 'static>(&mut self, handler: H) -> &mut Self {

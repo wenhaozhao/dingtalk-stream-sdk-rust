@@ -1,14 +1,19 @@
-use crate::client::{AccessTokenCache, AccessTokenResponse};
-use crate::{DingTalkStream, GET_TOKEN_URL};
+use crate::client::{AccessToken, AccessTokenCache, AccessTokenResponse};
+use crate::{Credential, DingTalkStream, GET_TOKEN_URL};
+use anyhow::anyhow;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 impl DingTalkStream {
     /// Get access token
-    pub async fn get_access_token(
-        &self,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub(super) async fn get_access_token(
+        http_client: &reqwest::Client,
+        credential: &Credential,
+        access_token: Arc<RwLock<Option<AccessTokenCache>>>,
+    ) -> crate::Result<AccessToken> {
         // Check cached token
         {
-            let cache = self.access_token.read().await;
+            let cache = access_token.read().await;
             if let Some(ref cache) = *cache {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -20,18 +25,17 @@ impl DingTalkStream {
             }
         }
 
-        let response = self
-            .http_client
+        let response = http_client
             .post(GET_TOKEN_URL)
             .json(&serde_json::json!({
-                "appKey": self.credential.client_id,
-                "appSecret": self.credential.client_secret,
+                "appKey": credential.client_id,
+                "appSecret": credential.client_secret,
             }))
             .send()
             .await?;
 
         if !response.status().is_success() {
-            return Err("Failed to get access token".into());
+            return Err(anyhow!("Failed to get access token"));
         }
 
         let token_resp: AccessTokenResponse = response.json().await?;
@@ -42,14 +46,15 @@ impl DingTalkStream {
             + token_resp.expire_in
             - 300; // 5 min buffer
 
-        {
-            let mut cache = self.access_token.write().await;
+        let access_token = {
+            let mut cache = access_token.write().await;
+            let access_token = AccessToken(token_resp.access_token);
             *cache = Some(AccessTokenCache {
-                token: token_resp.access_token.clone(),
+                token: access_token.clone(),
                 expire_time,
             });
-        }
-
-        Ok(token_resp.access_token)
+            access_token
+        };
+        Ok(access_token)
     }
 }
