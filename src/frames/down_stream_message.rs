@@ -93,7 +93,7 @@ pub enum MessageTopic {
     KeepAlive,
     #[serde(rename = "ping")]
     Ping,
-    Event(String),
+    Callback(String),
 }
 
 impl From<String> for MessageTopic {
@@ -105,7 +105,7 @@ impl From<String> for MessageTopic {
             "DISCONNECT" => MessageTopic::Disconnect,
             "KEEPALIVE" => MessageTopic::KeepAlive,
             "PING" => MessageTopic::Ping,
-            _ => MessageTopic::Event(s),
+            _ => MessageTopic::Callback(s),
         }
     }
 }
@@ -128,7 +128,7 @@ impl std::fmt::Display for MessageTopic {
             MessageTopic::Disconnect => "disconnect",
             MessageTopic::KeepAlive => "KEEPALIVE",
             MessageTopic::Ping => "ping",
-            MessageTopic::Event(s) => s,
+            MessageTopic::Callback(s) => s,
         };
         write!(f, "{str}")
     }

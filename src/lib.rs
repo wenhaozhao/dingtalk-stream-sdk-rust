@@ -5,7 +5,41 @@
 //! # Quick Start
 //!
 //! ```rust
-//! todo add it
+//! use dingtalk_stream::{Credential, DingTalkStream, CallbackHandler, MessageTopic, TOPIC_ROBOT};
+//! use dingtalk_stream::handlers::{Resp, Error, ErrorCode};
+//! use async_trait::async_trait;
+//! use dingtalk_stream::frames::CallbackMessage;
+//!
+//! // Define a handler for robot messages
+//! struct MyRobotHandler(MessageTopic);
+//!
+//! #[async_trait]
+//! impl CallbackHandler for MyRobotHandler {
+//!     async fn process(&self, message: &CallbackMessage) -> Result<Resp, Error> {
+//!         // Process the message and return a response
+//!         Ok(Resp::Text("Hello from DingTalk SDK!".to_string()))
+//!     }
+//!
+//!     fn topic(&self) -> &MessageTopic {
+//!         &self.0
+//!     }
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     let credential = Credential::new(
+//!         "your-client-id".to_string(),
+//!         "your-client-secret".to_string(),
+//!     );
+//!
+//!     let mut client = DingTalkStream::new(credential)
+//!         .register_callback_handler(MyRobotHandler(
+//!             MessageTopic::Callback(TOPIC_ROBOT.to_string()),
+//!         ));
+//!
+//!     client.start_forever().await;
+//!     Ok(())
+//! }
 //! ```
 
 pub mod client;
@@ -19,7 +53,7 @@ pub use credential::Credential;
 pub use frames::{
     AckMessage, CallbackMessage, EventMessage, MessageHeaders, MessageTopic, SystemMessage,
 };
-pub use handlers::{CallbackHandler, EventHandler, SystemHandler};
+pub use handlers::{CallbackHandler, EventHandler, SystemHandler, Resp, Error, ErrorCode};
 
 // Re-export for convenience
 pub use client::ClientConfig;

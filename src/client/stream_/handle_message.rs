@@ -81,7 +81,7 @@ impl DingTalkStream {
                 });
                 let _ = tx.send(response.to_string()).await;
             }
-            None | Some(MessageTopic::Event(_)) => {}
+            None | Some(MessageTopic::Callback(_)) => {}
         }
         // Call custom system handler if registered
         if let Some(handler) = &self.system_handler {

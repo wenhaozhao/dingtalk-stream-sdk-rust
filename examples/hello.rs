@@ -58,7 +58,7 @@ async fn main() {
 
     // Create client with debug mode
     let mut client = DingTalkStream::new(credential).register_callback_handler(
-        RobotMessageHandler(MessageTopic::Event(TOPIC_ROBOT.to_string())),
+        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())),
     );
     // Start the client (will run forever with auto-reconnect)
     client.start_forever().await;

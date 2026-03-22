@@ -23,6 +23,7 @@ pub use callback_message::{
     CallbackMessage, Data as CallbackMessageData, File as CallbackMessagePayloadFile,
     Payload as CallbackMessagePayload, Picture as CallbackMessagePayloadPicture,
     RichText as CallbackMessagePayloadRichText, Text as CallbackMessagePayloadText,
+    RichTextItem
 };
 
 /// ACK message status codes

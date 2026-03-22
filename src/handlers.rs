@@ -98,7 +98,7 @@ pub struct DefaultCallbackHandler {
 impl DefaultCallbackHandler {
     pub fn new(topic: &str) -> Self {
         Self {
-            topic: MessageTopic::Event(topic.to_string()),
+            topic: MessageTopic::Callback(topic.to_string()),
         }
     }
 }

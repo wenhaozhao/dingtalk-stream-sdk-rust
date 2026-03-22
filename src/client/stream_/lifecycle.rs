@@ -180,7 +180,7 @@ impl DingTalkStream {
             if handler.is_some() {
                 topics.push(Subscription {
                     sub_type: "EVENT".to_string(),
-                    topic: MessageTopic::Event("*".to_string()),
+                    topic: MessageTopic::Callback("*".to_string()),
                 });
             }
         }
@@ -199,7 +199,7 @@ impl DingTalkStream {
             // Default to all events if no handlers registered
             topics.push(Subscription {
                 sub_type: "EVENT".to_string(),
-                topic: MessageTopic::Event("*".to_string()),
+                topic: MessageTopic::Callback("*".to_string()),
             });
         }
         Ok(topics)
