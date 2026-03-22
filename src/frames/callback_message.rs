@@ -2,6 +2,7 @@ use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// Callback message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,31 +48,21 @@ impl TryFrom<DownStreamMessage> for CallbackMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Data {
     #[serde(rename = "msgId")]
-    pub msg_id: Option<String>,
-    #[serde(rename = "conversationId")]
-    pub conversation_id: Option<String>,
-    #[serde(rename = "chatbotCorpId")]
-    pub chatbot_corp_id: Option<String>,
-    #[serde(rename = "chatbotUserId")]
-    pub chatbot_user_id: Option<String>,
-    #[serde(rename = "senderCorpId")]
-    pub sender_corp_id: Option<String>,
-    #[serde(rename = "conversationType")]
-    pub conversation_type: Option<String>,
-    #[serde(rename = "senderNick")]
-    pub sender_nick: Option<String>,
+    pub msg_id: String,
+    #[serde(flatten)]
+    pub conversation: Conversation,
+    #[serde(flatten)]
+    pub sender: Sender,
+    #[serde(flatten)]
+    pub session_webhook: SessionWebhook,
+    #[serde(flatten)]
+    pub chatbot: Chatbot,
+
     #[serde(rename = "isAdmin")]
     pub is_admin: Option<bool>,
-    #[serde(rename = "senderStaffId")]
-    pub sender_staff_id: Option<String>,
-    #[serde(rename = "sessionWebhookExpiredTime")]
-    pub session_webhook_expired_time: Option<i64>,
-    #[serde(rename = "senderId")]
-    pub sender_id: Option<String>,
-    #[serde(rename = "sessionWebhook")]
-    pub session_webhook: Option<String>,
-    #[serde(rename = "robotCode")]
-    pub robot_code: Option<String>,
+
+
+
     #[serde(rename = "openThreadId")]
     pub open_thread_id: Option<String>,
     #[serde(rename = "senderPlatform")]
@@ -82,10 +73,73 @@ pub struct Data {
     pub at_users: Option<Vec<AtUser>>,
     #[serde(rename = "isInAtList")]
     pub is_in_at_list: Option<bool>,
-    #[serde(rename = "conversationTitle")]
-    pub conversation_title: Option<String>,
     #[serde(rename = "createAt")]
-    pub create_at: Option<i64>,
+    pub create_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "conversationType")]
+pub enum Conversation {
+    #[serde(rename = "1")]
+    Private {
+        #[serde(rename = "conversationId")]
+        id: String,
+    },
+    #[serde(rename = "2")]
+    Group {
+        #[serde(rename = "conversationId")]
+        id: String,
+        #[serde(rename = "conversationTitle")]
+        title: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sender {
+    #[serde(rename = "senderId")]
+    pub sender_id: String,
+    #[serde(rename = "senderNick")]
+    pub sender_nick: String,
+    #[serde(rename = "senderCorpId")]
+    pub sender_corp_id: Option<String>,
+    #[serde(rename = "senderStaffId")]
+    pub sender_staff_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionWebhook {
+    #[serde(rename = "sessionWebhook")]
+    url: Option<String>,
+    #[serde(rename = "sessionWebhookExpiredTime")]
+    expired_time: Option<u64>,
+}
+
+impl SessionWebhook {
+    pub fn webhook_url(&self) -> Option<url::Url> {
+        if let Some(url) = self.url.as_ref() {
+            url::Url::from_str(url).ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        if let Some(expired_time) = self.expired_time {
+            expired_time < chrono::Utc::now().timestamp() as u64
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chatbot {
+    #[serde(rename = "chatbotCorpId")]
+    pub chatbot_corp_id: Option<String>,
+    #[serde(rename = "chatbotUserId")]
+    pub chatbot_user_id: String,
+    #[serde(rename = "robotCode")]
+    pub robot_code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,7 +218,7 @@ mod tests {
     #[test]
     fn test_text_parse() {
         let data: Data = serde_json::from_str(TEXT_JSON).unwrap();
-        assert_eq!(data.msg_id.unwrap().as_str(), "msgBjXREkdlZkfTfrIiQomjAw==");
+        assert_eq!(data.msg_id.as_str(), "msgBjXREkdlZkfTfrIiQomjAw==");
         if let Some(Payload::Text {
             text: Text { content },
         }) = data.payload
@@ -177,7 +231,7 @@ mod tests {
     #[test]
     fn test_picture_parse() {
         let data: Data = serde_json::from_str(PICTURE_JSON).unwrap();
-        assert_eq!(data.msg_id.unwrap().as_str(), "msgmJpewjjmDF5LPJdRs9n/ZA==");
+        assert_eq!(data.msg_id.as_str(), "msgmJpewjjmDF5LPJdRs9n/ZA==");
         if let Some(Payload::Picture {
             content: Picture { download_code, .. },
         }) = data.payload
@@ -191,7 +245,7 @@ mod tests {
     #[test]
     fn test_file_parse() {
         let data: Data = serde_json::from_str(FILE_JSON).unwrap();
-        assert_eq!(data.msg_id.unwrap().as_str(), "msgBCO626EXCHXfZoDioTCPxg==");
+        assert_eq!(data.msg_id.as_str(), "msgBCO626EXCHXfZoDioTCPxg==");
         if let Some(Payload::File {
             content: File { file_id, .. },
         }) = data.payload
@@ -205,7 +259,7 @@ mod tests {
     #[test]
     fn test_rich_text_parse() {
         let data: Data = serde_json::from_str(RICH_TEXT_JSON).unwrap();
-        assert_eq!(data.msg_id.unwrap().as_str(), "msgGDkZWYZlvw7rFtTHcDIFWw==");
+        assert_eq!(data.msg_id.as_str(), "msgGDkZWYZlvw7rFtTHcDIFWw==");
         if let Some(Payload::RichText {
             content: RichText { content: rich_text },
             ..

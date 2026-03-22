@@ -143,6 +143,6 @@ mod tests {
         let message: DownStreamMessage = serde_json::from_str(json).unwrap();
         let CallbackMessage { data, .. } = CallbackMessage::try_from(message).unwrap();
         let data = data.unwrap();
-        assert_eq!(data.msg_id.unwrap().as_str(), "msgtH7As/bwsnWfBS0olMV5tA==");
+        assert_eq!(data.msg_id.as_str(), "msgtH7As/bwsnWfBS0olMV5tA==");
     }
 }

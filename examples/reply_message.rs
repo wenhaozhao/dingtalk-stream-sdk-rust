@@ -17,16 +17,15 @@
 //! ```
 
 use async_trait::async_trait;
+use chrono::{Local, TimeZone};
 use dingtalk_stream::frames::{CallbackMessage, CallbackMessageData, CallbackMessagePayload};
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
     CallbackHandler, Credential, DingTalkStream, MessageTopic, Result, TOPIC_ROBOT,
 };
-use reqwest::Client;
-use serde_json::json;
 use std::env;
 
-/// Custom handler for robot messages that sends replies
+/// Custom handler for robot messages that sends replies using SDK methods
 struct ReplyHandler(MessageTopic);
 
 #[async_trait]
@@ -43,7 +42,9 @@ impl CallbackHandler for ReplyHandler {
             msg: "No sessionWebhook found".to_string(),
             code: ErrorCode::BadRequest,
         })?;
-
+        let session_webhook_expired_time = data.session_webhook_expired_time.unwrap_or(0);
+        let expire_time = Local.timestamp_millis_opt(session_webhook_expired_time).unwrap();
+        println!("{session_webhook}, expire-at: {}", expire_time.format("%Y-%m-%d %H:%M:%S"));
         let sender_staff_id = data.sender_staff_id.as_ref().ok_or_else(|| Error {
             msg: "No senderStaffId found".to_string(),
             code: ErrorCode::BadRequest,
@@ -54,23 +55,64 @@ impl CallbackHandler for ReplyHandler {
 
         println!("Received message: {}", content);
 
-        // Send a reply to the user
+        // Send a reply to the user using SDK's send_text method
         let response_text = format!("Echo: {}", content);
-        let reply_result = send_reply(session_webhook, sender_staff_id, &response_text).await;
+        let client = DingTalkStream::new(Credential::new(
+            "dummy".to_string(),
+            "dummy".to_string(),
+        ));
 
-        match reply_result {
-            Ok(_) => {
-                println!("Reply sent successfully");
-                Ok(Resp::Text(response_text))
+
+        // Use SDK's send_text method
+        match client
+            .send_text(
+                session_webhook,
+                &response_text,
+                Some(vec![sender_staff_id.clone()]),
+                false,
+            )
+            .await
+        {
+            Ok(result) => {
+                println!("Reply sent successfully: {:?}", result);
             }
             Err(e) => {
                 println!("Failed to send reply: {}", e);
-                Err(Error {
+                return Err(Error {
+                    msg: format!("Failed to send reply: {}", e),
+                    code: ErrorCode::InternalServerError,
+                });
+            }
+        };
+
+        // Use SDK's send_text method
+        match client
+            .send_markdown(
+                session_webhook,
+                "send_markdown title",
+                &format!(r#"
+### hello {}
+- A
+- B
+                "#, &response_text),
+                Some(vec![sender_staff_id.clone()]),
+                false,
+            )
+            .await
+        {
+            Ok(result) => {
+                println!("Reply send_markdown successfully: {:?}", result);
+            }
+            Err(e) => {
+                println!("Failed to send reply: {}", e);
+                return Err(Error {
                     msg: format!("Failed to send reply: {}", e),
                     code: ErrorCode::InternalServerError,
                 })
             }
         }
+        Ok(Resp::Text("ack".to_string()))
+
     }
 
     fn topic(&self) -> &MessageTopic {
@@ -87,64 +129,38 @@ fn extract_text_content(data: &CallbackMessageData) -> String {
     "Unknown content".to_string()
 }
 
-/// Send a text message reply via sessionWebhook
-async fn send_reply(
-    session_webhook: &str,
-    sender_staff_id: &str,
-    text: &str,
-) -> Result<reqwest::Response> {
-    let client = Client::new();
-
-    let body = json!({
-        "msgtype": "text",
-        "text": {
-            "content": text
-        },
-        "at": {
-            "atUserIds": [sender_staff_id],
-            "isAtAll": false
-        }
-    });
-
-    let response = client
-        .post(session_webhook)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
+/// Example: Send markdown message
+async fn send_markdown_example(client: &DingTalkStream, session_webhook: &str) -> Result<()> {
+    // Send a markdown message
+    let result = client
+        .send_markdown(
+            session_webhook,
+            "Title",
+            "## Hello\nThis is a markdown message",
+            None,
+            false,
+        )
         .await?;
 
-    Ok(response)
+    println!("Markdown sent: {:?}", result);
+    Ok(())
 }
 
-/// Send a markdown message reply via sessionWebhook
-async fn send_markdown_reply(
-    session_webhook: &str,
-    sender_staff_id: &str,
-    title: &str,
-    text: &str,
-) -> Result<reqwest::Response> {
-    let client = Client::new();
-
-    let body = json!({
-        "msgtype": "markdown",
-        "markdown": {
-            "title": title,
-            "text": text
-        },
-        "at": {
-            "atUserIds": [sender_staff_id],
-            "isAtAll": false
-        }
-    });
-
-    let response = client
-        .post(session_webhook)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
+/// Example: Send link message
+async fn send_link_example(client: &DingTalkStream, session_webhook: &str) -> Result<()> {
+    // Send a link message
+    let result = client
+        .send_link(
+            session_webhook,
+            "Link Title",
+            "Click to open",
+            "https://open.dingtalk.com",
+            None,
+        )
         .await?;
 
-    Ok(response)
+    println!("Link sent: {:?}", result);
+    Ok(())
 }
 
 #[tokio::main]
@@ -166,7 +182,9 @@ async fn main() -> Result<()> {
 
     // Create client and register handler
     let mut client = DingTalkStream::new(credential)
-        .register_callback_handler(ReplyHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())));
+        .register_callback_handler(ReplyHandler(MessageTopic::Callback(
+            TOPIC_ROBOT.to_string(),
+        )));
 
     // Start the client (will run forever with auto-reconnect)
     client.start_forever().await;
