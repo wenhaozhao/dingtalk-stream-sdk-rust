@@ -1,6 +1,19 @@
-use crate::{CallbackMessage, EventMessage};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+
+
+mod system_message;
+pub use system_message::SystemMessage;
+mod event_message;
+pub use event_message::EventMessage;
+mod callback_message;
+pub use callback_message::{
+    CallbackMessage, Conversation as CallbackMessageConversation, Data as CallbackMessageData,
+    File as CallbackMessagePayloadFile, Payload as CallbackMessagePayload,
+    Picture as CallbackMessagePayloadPicture, RichText as CallbackMessagePayloadRichText,
+    RichTextItem, Sender as CallbackMessageSender, SessionWebhook,
+    Text as CallbackMessagePayloadText,
+};
 
 /// Base message structure for downstream messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +40,7 @@ pub enum Type {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Data {
-    System(super::callback_message::Data),
+    System(callback_message::Data),
     Event(EventMessage),
     Callback(CallbackMessage),
 }
@@ -139,7 +152,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_message_topic_deserialize() {
-        let json = include_str!("../../test_resources/client_downstream_msg.json");
+        let json = include_str!("../../../test_resources/client_downstream_msg.json");
         let message: DownStreamMessage = serde_json::from_str(json).unwrap();
         let CallbackMessage { data, .. } = CallbackMessage::try_from(message).unwrap();
         let data = data.unwrap();

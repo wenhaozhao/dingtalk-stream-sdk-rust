@@ -133,7 +133,7 @@ impl DingTalkStream {
     ) -> Result<ConnectionResponse, Box<dyn std::error::Error + Send + Sync>> {
         let subscriptions = self.build_subscriptions()?;
 
-        let client = reqwest::Client::new();
+        let client = &self.http_client;
         let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
 
         let request_body = serde_json::json!({

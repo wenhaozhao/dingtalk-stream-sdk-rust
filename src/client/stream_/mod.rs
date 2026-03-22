@@ -6,7 +6,6 @@ use crate::{
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{mpsc, RwLock};
-use tracing::debug;
 
 mod handle_message;
 mod lifecycle;
@@ -33,6 +32,7 @@ pub struct DingTalkStream {
     stop_tx: RwLock<Option<mpsc::Sender<()>>>,
     /// Access token cache
     access_token: RwLock<Option<AccessTokenCache>>,
+    http_client: reqwest::Client,
 }
 
 impl DingTalkStream {
@@ -54,6 +54,7 @@ impl DingTalkStream {
             registered: Default::default(),
             stop_tx: Default::default(),
             access_token: Default::default(),
+            http_client: Default::default(),
         }
     }
 }
@@ -121,8 +122,8 @@ impl DingTalkStream {
             }
         }
 
-        let client = reqwest::Client::new();
-        let response = client
+        let response = self
+            .http_client
             .post(GET_TOKEN_URL)
             .json(&serde_json::json!({
                 "appKey": self.credential.client_id,
@@ -152,201 +153,5 @@ impl DingTalkStream {
         }
 
         Ok(token_resp.access_token)
-    }
-}
-
-impl DingTalkStream {
-    /// Send a message response
-    pub async fn send(
-        &self,
-        message_id: &str,
-        data: serde_json::Value,
-    ) -> crate::Result<()> {
-        let msg = serde_json::json!({
-            "code": 200,
-            "headers": {
-                "contentType": "application/json",
-                "messageId": message_id,
-            },
-            "message": "OK",
-            "data": serde_json::to_string(&data)?,
-        });
-
-        debug!("Sending message: {:?}", msg);
-
-        Ok(())
-    }
-
-    /// Send callback response (for robot messages)
-    pub async fn socket_callback_response(
-        &self,
-        message_id: &str,
-        result: serde_json::Value,
-    ) -> crate::Result<()> {
-        self.send(message_id, serde_json::json!({ "response": result }))
-            .await
-    }
-
-    /// Send Graph API response
-    pub async fn send_graph_api_response(
-        &self,
-        message_id: &str,
-        response: serde_json::Value,
-    ) -> crate::Result<()> {
-        self.send(message_id, response).await
-    }
-
-    /// Send a text message via session webhook
-    ///
-    /// # Arguments
-    /// * `session_webhook` - The webhook URL from incoming message
-    /// * `text` - The text content to send
-    /// * `at_user_ids` - User IDs to @, defaults to sender
-    /// * `at_all` - Whether to @all members
-    pub async fn send_text(
-        &self,
-        session_webhook: &str,
-        text: &str,
-        at_user_ids: Option<Vec<String>>,
-        at_all: bool,
-    ) -> crate::Result<serde_json::Value> {
-        let client = reqwest::Client::new();
-
-        let mut at = serde_json::json!({
-            "isAtAll": at_all
-        });
-
-        if let Some(user_ids) = at_user_ids {
-            at["atUserIds"] = serde_json::json!(user_ids);
-        }
-
-        let body = serde_json::json!({
-            "msgtype": "text",
-            "text": {
-                "content": text
-            },
-            "at": at
-        });
-
-        let response = client
-            .post(session_webhook)
-            .header("Content-Type", "application/json")
-            .header("Accept", "*/*")
-            .json(&body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Send text failed: {}", error_text));
-        }
-
-        let result: serde_json::Value = response.json().await?;
-        debug!("Send text response: {:?}", result);
-        Ok(result)
-    }
-
-    /// Send a markdown message via session webhook
-    ///
-    /// # Arguments
-    /// * `session_webhook` - The webhook URL from incoming message
-    /// * `title` - The title of the markdown message
-    /// * `text` - The markdown content to send
-    /// * `at_user_ids` - User IDs to @, defaults to sender
-    /// * `at_all` - Whether to @all members
-    pub async fn send_markdown(
-        &self,
-        session_webhook: &str,
-        title: &str,
-        text: &str,
-        at_user_ids: Option<Vec<String>>,
-        at_all: bool,
-    ) -> crate::Result<serde_json::Value> {
-        let client = reqwest::Client::new();
-
-        let mut at = serde_json::json!({
-            "isAtAll": at_all
-        });
-
-        if let Some(user_ids) = at_user_ids {
-            at["atUserIds"] = serde_json::json!(user_ids);
-        }
-
-        let body = serde_json::json!({
-            "msgtype": "markdown",
-            "markdown": {
-                "title": title,
-                "text": text
-            },
-            "at": at
-        });
-
-        let response = client
-            .post(session_webhook)
-            .header("Content-Type", "application/json")
-            .header("Accept", "*/*")
-            .json(&body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Send markdown failed: {}", error_text));
-        }
-
-        let result: serde_json::Value = response.json().await?;
-        debug!("Send markdown response: {:?}", result);
-        Ok(result)
-    }
-
-    /// Send a link message via session webhook
-    ///
-    /// # Arguments
-    /// * `session_webhook` - The webhook URL from incoming message
-    /// * `title` - The title of the link
-    /// * `text` - The description text
-    /// * `message_url` - The URL to open when clicking
-    /// * `pic_url` - Optional picture URL
-    pub async fn send_link(
-        &self,
-        session_webhook: &str,
-        title: &str,
-        text: &str,
-        message_url: &str,
-        pic_url: Option<&str>,
-    ) -> crate::Result<serde_json::Value> {
-        let client = reqwest::Client::new();
-
-        let mut link = serde_json::json!({
-            "title": title,
-            "text": text,
-            "messageUrl": message_url
-        });
-
-        if let Some(url) = pic_url {
-            link["picUrl"] = serde_json::json!(url);
-        }
-
-        let body = serde_json::json!({
-            "msgtype": "link",
-            "link": link
-        });
-
-        let response = client
-            .post(session_webhook)
-            .header("Content-Type", "application/json")
-            .header("Accept", "*/*")
-            .json(&body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Send link failed: {}", error_text));
-        }
-
-        let result: serde_json::Value = response.json().await?;
-        debug!("Send link response: {:?}", result);
-        Ok(result)
     }
 }

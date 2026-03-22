@@ -1,8 +1,10 @@
 use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
+use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::time::Duration;
 
 /// Callback message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +30,7 @@ impl TryFrom<DownStreamMessage> for CallbackMessage {
             extensions,
         }: DownStreamMessage,
     ) -> crate::Result<Self> {
-        if let super::down_stream_message::Type::Callback = r#type {
+        if let super::Type::Callback = r#type {
             Ok(Self {
                 spec_version,
                 headers,
@@ -54,15 +56,11 @@ pub struct Data {
     #[serde(flatten)]
     pub sender: Sender,
     #[serde(flatten)]
-    pub session_webhook: SessionWebhook,
+    pub session_webhook: Option<SessionWebhook>,
     #[serde(flatten)]
     pub chatbot: Chatbot,
-
     #[serde(rename = "isAdmin")]
     pub is_admin: Option<bool>,
-
-
-
     #[serde(rename = "openThreadId")]
     pub open_thread_id: Option<String>,
     #[serde(rename = "senderPlatform")]
@@ -109,26 +107,28 @@ pub struct Sender {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionWebhook {
     #[serde(rename = "sessionWebhook")]
-    url: Option<String>,
+    url: String,
     #[serde(rename = "sessionWebhookExpiredTime")]
-    expired_time: Option<u64>,
+    expired_time: i64,
 }
 
 impl SessionWebhook {
-    pub fn webhook_url(&self) -> Option<url::Url> {
-        if let Some(url) = self.url.as_ref() {
-            url::Url::from_str(url).ok()
-        } else {
-            None
-        }
+    pub fn webhook_url(&self) -> crate::Result<url::Url> {
+        Ok(url::Url::from_str(&self.url)?)
     }
 
-    pub fn is_expired(&self) -> bool {
-        if let Some(expired_time) = self.expired_time {
-            expired_time < chrono::Utc::now().timestamp() as u64
-        } else {
-            false
+    pub fn timeout(&self) -> Option<Duration> {
+        if let chrono::LocalResult::Single(expired_time) =
+            Utc.timestamp_millis_opt(self.expired_time)
+        {
+            let now = Utc::now();
+            if expired_time > now {
+                if let Ok(duration) = (expired_time - now).to_std() {
+                    return Some(duration);
+                }
+            }
         }
+        None
     }
 }
 
@@ -211,7 +211,7 @@ pub enum RichTextItem {
 
 #[cfg(test)]
 mod tests {
-    use crate::frames::callback_message::{
+    use super::{
         Data, File, Payload, Picture, RichText, RichTextItem, Text,
     };
 
@@ -277,8 +277,8 @@ mod tests {
         }
     }
 
-    const TEXT_JSON: &str = include_str!("../../test_resources/cb_msg_text.json");
-    const PICTURE_JSON: &str = include_str!("../../test_resources/cb_msg_picture.json");
-    const FILE_JSON: &str = include_str!("../../test_resources/cb_msg_file.json");
-    const RICH_TEXT_JSON: &str = include_str!("../../test_resources/cb_msg_rich_text.json");
+    const TEXT_JSON: &str = include_str!("../../../test_resources/cb_msg_text.json");
+    const PICTURE_JSON: &str = include_str!("../../../test_resources/cb_msg_picture.json");
+    const FILE_JSON: &str = include_str!("../../../test_resources/cb_msg_file.json");
+    const RICH_TEXT_JSON: &str = include_str!("../../../test_resources/cb_msg_rich_text.json");
 }

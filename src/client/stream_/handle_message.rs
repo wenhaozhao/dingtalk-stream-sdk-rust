@@ -1,10 +1,12 @@
-use crate::frames::MessageType;
+use crate::frames::{CallbackMessageData, CallbackWebhookMessage, MessageType, SessionWebhook};
 use crate::{
     AckMessage, CallbackMessage, DingTalkStream, DownStreamMessage, EventMessage, MessageTopic,
     SystemMessage,
 };
+use anyhow::anyhow;
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
 use tracing::{debug, error, info, warn};
 
 impl DingTalkStream {
@@ -134,11 +136,26 @@ impl DingTalkStream {
             warn!("Failed to parse callback message, skipping processing");
             return Ok(());
         };
+        let sender = if let Some(CallbackMessageData {
+            session_webhook: Some(session_webhook),
+            ..
+        }) = &cb_msg.data
+        {
+            let (sender, receiver) = mpsc::channel(1024);
+            let http_client = self.http_client.clone();
+            let session_webhook = session_webhook.clone();
+            tokio::spawn(async move {
+                Self::handle_webhook_message(http_client, session_webhook, receiver).await
+            });
+            Some(sender)
+        } else {
+            None
+        };
         let Some(handler) = self.callback_handlers.get(&topic) else {
             warn!("No handler registered for topic: {}", topic);
             return Ok(());
         };
-        let (code, response_msg) = match handler.process(&cb_msg).await {
+        let (code, response_msg) = match handler.process(&cb_msg, sender).await {
             Ok(result) => (200, result.to_string()),
             Err(err) => (err.code as i32, err.msg),
         };
@@ -149,5 +166,46 @@ impl DingTalkStream {
         let _ = tx.send(serde_json::to_string(&ack)?).await;
         debug!("Callback processed with code: {}", code);
         Ok(())
+    }
+
+    async fn handle_webhook_message(
+        http_client: reqwest::Client,
+        session_webhook: SessionWebhook,
+        mut receiver: Receiver<CallbackWebhookMessage>,
+    ) {
+        if let (Ok(webhook_url), Some(timeout)) =
+            (session_webhook.webhook_url(), session_webhook.timeout())
+        {
+            loop {
+                tokio::select! {
+                    message = receiver.recv() => {
+                        if let Some(ref message@CallbackWebhookMessage{send_result_cb, ..}) = &message {
+                                  let response = http_client
+                            .post(webhook_url.clone())
+                            .header("Content-Type", "application/json")
+                            .header("Accept", "*/*")
+                            .json(&message)
+                            .send()
+                            .await;
+                            if let Some(cb) = send_result_cb {
+                                match response{
+                                    Ok(response)=>{
+                                        let code =response.status();
+                                        match response.text().await{
+                                            Ok(text)=>cb(Ok((code.as_u16(), text))),
+                                            Err(err)=> cb(Err(anyhow!("{err}"))),
+                                        }
+                                    },
+                                    Err(err)=> cb(Err(anyhow!("{err}"))),
+                                }
+                            }
+                        }
+                    }
+                    _ = tokio::time::sleep(timeout) =>{
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

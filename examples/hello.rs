@@ -3,7 +3,10 @@
 //! This example demonstrates how to create a simple DingTalk bot that responds to messages.
 
 use async_trait::async_trait;
-use dingtalk_stream::frames::{CallbackMessageData, CallbackMessagePayload};
+use dingtalk_stream::frames::{
+    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage,
+    CallbackWebhookMessageContent,
+};
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
     CallbackHandler, CallbackMessage, Credential, DingTalkStream, MessageTopic, TOPIC_ROBOT,
@@ -16,7 +19,11 @@ struct RobotMessageHandler(MessageTopic);
 
 #[async_trait]
 impl CallbackHandler for RobotMessageHandler {
-    async fn process(&self, message: &CallbackMessage) -> Result<Resp, Error> {
+    async fn process(
+        &self,
+        message: &CallbackMessage,
+        cb_webhook_msg_sender: Option<tokio::sync::mpsc::Sender<CallbackWebhookMessage>>,
+    ) -> Result<Resp, Error> {
         // Extract text from the message
         if let Some(data) = &message.data {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
@@ -25,6 +32,19 @@ impl CallbackHandler for RobotMessageHandler {
                 println!("Received message: {}", text.content);
                 // You would typically send a response back here
                 // For now, just echo the message
+                if let Some(sender) = cb_webhook_msg_sender {
+                    let _ = sender
+                        .send(CallbackWebhookMessage {
+                            content: CallbackWebhookMessageContent::Text {
+                                text: format!("echo {}", text.content).into(),
+                            },
+                            at: Default::default(),
+                            send_result_cb: Some(Box::new(|result| {
+                                println!("Message sent result: {:?}", result);
+                            })),
+                        })
+                        .await;
+                }
                 return Ok(Resp::Text(format!("Echo: {}", text.content)));
             }
         }
