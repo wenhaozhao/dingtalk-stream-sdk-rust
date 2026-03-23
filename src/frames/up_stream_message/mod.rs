@@ -6,7 +6,7 @@ pub use callback_message::{
 use serde::{Deserialize, Serialize};
 
 mod robot_message;
-pub use robot_message::RobotBatchMessage;
+pub use robot_message::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msgtype")]

@@ -1,11 +1,11 @@
 use crate::client::AccessTokenCache;
-use crate::frames::RobotBatchMessage;
 use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
+use crate::frames::RobotMessage;
 
 mod access_token;
 mod handle_message;
@@ -73,10 +73,10 @@ impl Deref for StopSignalSender {
 }
 
 #[derive(Clone)]
-pub struct DingtalkMessageSender(pub(super) tokio::sync::mpsc::Sender<RobotBatchMessage>);
+pub struct DingtalkMessageSender(pub(super) tokio::sync::mpsc::Sender<RobotMessage>);
 
 impl Deref for DingtalkMessageSender {
-    type Target = tokio::sync::mpsc::Sender<RobotBatchMessage>;
+    type Target = tokio::sync::mpsc::Sender<RobotMessage>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

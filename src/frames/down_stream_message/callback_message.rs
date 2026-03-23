@@ -1,4 +1,4 @@
-use crate::frames::DingTalkUserId;
+use crate::frames::{DingTalkGroupConversationId, DingTalkPrivateConversationId, DingTalkUserId};
 use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
@@ -82,12 +82,12 @@ pub enum Conversation {
     #[serde(rename = "1")]
     Private {
         #[serde(rename = "conversationId")]
-        id: String,
+        id: DingTalkPrivateConversationId,
     },
     #[serde(rename = "2")]
     Group {
         #[serde(rename = "conversationId")]
-        id: String,
+        id: DingTalkGroupConversationId,
         #[serde(rename = "conversationTitle")]
         title: Option<String>,
     },

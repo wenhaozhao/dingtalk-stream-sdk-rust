@@ -18,25 +18,52 @@ mod up_stream_message;
 pub use up_stream_message::{
     CallbackWebhookMessage, CallbackWebhookMessageAt, MessageContent as UpMessageContent,
     MessageContentLink as UpMessageContentLink, MessageContentMarkdown as UpMessageContentMarkdown,
-    MessageContentText as UpMessageContentText, RobotBatchMessage,
+    MessageContentText as UpMessageContentText, RobotGroupMessage, RobotMessage,
+    RobotPrivateMessage,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DingTalkUserId(pub String);
 
-impl From<String> for DingTalkUserId {
-    fn from(value: String) -> Self {
-        DingTalkUserId(value)
-    }
-}
-
-impl From<&str> for DingTalkUserId {
-    fn from(value: &str) -> Self {
-        value.to_string().into()
+impl<S: Into<String>> From<S> for DingTalkUserId {
+    fn from(value: S) -> Self {
+        Self(value.into())
     }
 }
 
 impl Deref for DingTalkUserId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DingTalkPrivateConversationId(pub String);
+
+impl<S: Into<String>> From<S> for DingTalkPrivateConversationId {
+    fn from(value: S) -> Self {
+        Self(value.into())
+    }
+}
+impl Deref for DingTalkPrivateConversationId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DingTalkGroupConversationId(pub String);
+
+impl<S: Into<String>> From<S> for DingTalkGroupConversationId {
+    fn from(value: S) -> Self {
+        Self(value.into())
+    }
+}
+impl Deref for DingTalkGroupConversationId {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {

@@ -1,6 +1,6 @@
 use crate::client::DingtalkMessageSender;
-use crate::frames::{RobotBatchMessage, UpMessageContent};
-use crate::ROBOT_BATCH_SEND_MESSAGE;
+use crate::frames::{RobotGroupMessage, RobotMessage, RobotPrivateMessage, UpMessageContent};
+use crate::{ROBOT_SEND_GROUP_MESSAGE, ROBOT_SEND_PRIVATE_MESSAGE};
 use anyhow::anyhow;
 use serde_json::json;
 use std::sync::Arc;
@@ -18,13 +18,28 @@ impl super::DingTalkStream {
                     .await
                 {
                     Ok(access_token) => {
-                        let _ = Self::send_message(
-                            &http_client,
-                            &access_token,
-                            &credential.client_id,
-                            &message,
-                        )
-                        .await;
+                        match message{
+                            RobotMessage::Private(message) =>{
+                                let _ = Self::send_private_message(
+                                    &http_client,
+                                    &access_token,
+                                    &credential.client_id,
+                                    &message,
+                                )
+                                    .await;
+                            },
+                            RobotMessage::Group(message)=>{
+                                let _ = Self::send_group_message(
+                                    &http_client,
+                                    &access_token,
+                                    &credential.client_id,
+                                    &message,
+                                )
+                                    .await;
+                            }
+                        }
+                        
+           
                     }
                     Err(err) => {
                         warn!("Failed to get access token: {}", err);
@@ -35,15 +50,15 @@ impl super::DingTalkStream {
         (self, DingtalkMessageSender(sender))
     }
 
-    async fn send_message(
+    async fn send_private_message(
         http_client: &reqwest::Client,
         access_token: &str,
         client_id: &str,
-        RobotBatchMessage {
+        RobotPrivateMessage {
             user_ids,
             content,
             send_result_cb,
-        }: &RobotBatchMessage,
+        }: &RobotPrivateMessage,
     ) -> crate::Result<()> {
         let (msg_key, msg_param) = match content {
             UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
@@ -53,12 +68,56 @@ impl super::DingTalkStream {
             UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
         };
         let response = http_client
-            .post(ROBOT_BATCH_SEND_MESSAGE)
+            .post(ROBOT_SEND_PRIVATE_MESSAGE)
             .header("x-acs-dingtalk-access-token", access_token)
             .header("Content-Type", "application/json")
             .json(&json!({
                 "robotCode": client_id,
                 "userIds": user_ids,
+                "msgParam": msg_param,
+                "msgKey": msg_key
+            }))
+            .send()
+            .await;
+        if let Some(cb) = send_result_cb {
+            match response {
+                Ok(response) => {
+                    let code = response.status();
+                    match response.text().await {
+                        Ok(text) => cb(Ok((code.as_u16(), text))),
+                        Err(err) => cb(Err(anyhow!("{err}"))),
+                    }
+                }
+                Err(err) => cb(Err(anyhow!("{err}"))),
+            }
+        }
+        Ok(())
+    }
+
+    async fn send_group_message(
+        http_client: &reqwest::Client,
+        access_token: &str,
+        client_id: &str,
+        RobotGroupMessage {
+            group_id,
+            content,
+            send_result_cb,
+        }: &RobotGroupMessage,
+    ) -> crate::Result<()> {
+        let (msg_key, msg_param) = match content {
+            UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
+            UpMessageContent::Markdown { markdown } => {
+                ("sampleMarkdown", serde_json::to_string(markdown)?)
+            }
+            UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
+        };
+        let response = http_client
+            .post(ROBOT_SEND_GROUP_MESSAGE)
+            .header("x-acs-dingtalk-access-token", access_token)
+            .header("Content-Type", "application/json")
+            .json(&json!({
+                "robotCode": client_id,
+                "openConversationId": group_id,
                 "msgParam": msg_param,
                 "msgKey": msg_key
             }))

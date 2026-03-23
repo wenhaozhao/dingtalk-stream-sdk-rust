@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use dingtalk_stream::frames::{
-    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RobotBatchMessage,
+    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RobotPrivateMessage,
     UpMessageContent,
 };
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
@@ -94,13 +94,16 @@ async fn main() {
     for _ in 0..10 {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let _ = message_sender
-            .send(RobotBatchMessage {
-                user_ids: vec!["12345".into()],
-                content: "Hello, World!".into(),
-                send_result_cb: Some(Box::new(|result| {
-                    println!("{result:?}");
-                })),
-            })
+            .send(
+                RobotPrivateMessage {
+                    user_ids: vec!["12345".into()],
+                    content: "Hello, World!".into(),
+                    send_result_cb: Some(Arc::new(|result| {
+                        println!("{result:?}");
+                    })),
+                }
+                .into(),
+            )
             .await;
     }
     let _ = tokio::signal::ctrl_c().await;

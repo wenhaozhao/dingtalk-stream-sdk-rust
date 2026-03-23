@@ -1,7 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
-
 mod system_message;
 pub use system_message::SystemMessage;
 mod event_message;
