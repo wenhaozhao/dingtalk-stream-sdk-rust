@@ -32,6 +32,12 @@ pub struct MessageContentText {
     pub content: String,
 }
 
+impl From<MessageContentText> for MessageContent {
+    fn from(value: MessageContentText) -> Self {
+        Self::Text { text: value }
+    }
+}
+
 impl<T: Into<String>> From<T> for MessageContentText {
     fn from(value: T) -> Self {
         Self {
@@ -44,6 +50,12 @@ impl<T: Into<String>> From<T> for MessageContentText {
 pub struct MessageContentMarkdown {
     pub title: String,
     pub text: String,
+}
+
+impl From<MessageContentMarkdown> for MessageContent {
+    fn from(value: MessageContentMarkdown) -> Self {
+        Self::Markdown { markdown: value }
+    }
 }
 
 impl<Title: Into<String>, Text: Into<String>> From<(Title, Text)> for MessageContentMarkdown {
@@ -63,4 +75,10 @@ pub struct MessageContentLink {
     pub message_url: Option<String>,
     #[serde(rename = "picUrl")]
     pub pic_url: Option<String>,
+}
+
+impl From<MessageContentLink> for MessageContent {
+    fn from(value: MessageContentLink) -> Self {
+        Self::Link { link: value }
+    }
 }
