@@ -41,7 +41,7 @@ impl CallbackHandler for RobotMessageHandler {
                                 text: format!("echo {}", text.content).into(),
                             },
                             at: Default::default(),
-                            send_result_cb: Some(Box::new(|result| {
+                            send_result_cb: Some(Arc::new(|result| {
                                 println!("Message sent result: {:?}", result);
                             })),
                         })
