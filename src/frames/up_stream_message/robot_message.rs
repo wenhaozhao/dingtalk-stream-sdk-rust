@@ -1,7 +1,7 @@
 /*
 
 */
-use crate::frames::{DingTalkPrivateConversationId, DingTalkUserId};
+use crate::frames::{DingTalkGroupConversationId, DingTalkUserId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[derive(Serialize, Deserialize)]
@@ -27,7 +27,7 @@ impl From<RobotPrivateMessage> for RobotMessage {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RobotGroupMessage {
-    pub group_id: DingTalkPrivateConversationId,
+    pub group_id: DingTalkGroupConversationId,
     pub content: super::MessageContent,
     #[serde(skip)]
     pub send_result_cb:
