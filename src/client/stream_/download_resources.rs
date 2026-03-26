@@ -1,11 +1,8 @@
-use crate::frames::{
-    CallbackMessagePayloadFile, CallbackMessagePayloadPicture, CallbackMessagePayloadRichText,
-};
+use crate::frames::{CallbackMessagePayloadFile, CallbackMessagePayloadPicture};
 use crate::DingTalkStream;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use serde_json::json;
-use std::io::Cursor;
 use std::ops::Deref;
 use std::path::PathBuf;
 use tracing::info;
@@ -22,15 +19,20 @@ pub trait DingtalkResource {
 }
 
 #[cfg(feature = "image")]
+type Picture = image::DynamicImage;
+
+#[cfg(not(feature = "image"))]
+type Picture = Vec<u8>;
+
 #[async_trait]
 impl DingtalkResource for CallbackMessagePayloadPicture {
-    type T = image::DynamicImage;
+    type T = Picture;
 
     async fn fetch(
         &self,
         dingtalk: &DingTalkStream,
         save_to_dir: PathBuf,
-    ) -> crate::Result<(PathBuf, image::DynamicImage)> {
+    ) -> crate::Result<(PathBuf, Self::T)> {
         if !save_to_dir.exists() {
             tokio::fs::create_dir_all(&save_to_dir).await?;
         }
@@ -43,7 +45,10 @@ impl DingtalkResource for CallbackMessagePayloadPicture {
         ));
         if filepath.exists() {
             let bytes = tokio::fs::read(&filepath).await?;
+            #[cfg(feature = "image")]
             return Ok((filepath, image::load_from_memory(&bytes)?));
+            #[cfg(not(feature = "image"))]
+            return Ok((filepath, bytes));
         }
         let download_url = fetch_download_url(dingtalk, &self.download_code).await?;
         let bytes = dingtalk
@@ -53,11 +58,21 @@ impl DingtalkResource for CallbackMessagePayloadPicture {
             .await?
             .bytes()
             .await?;
-        let image = image::load_from_memory(&bytes)?;
-        let mut cursor = Cursor::new(vec![]);
-        image.write_to(&mut cursor, image::ImageFormat::Png)?;
 
-        tokio::fs::write(&filepath, cursor.into_inner()).await?;
+        #[cfg(feature = "image")]
+        let image = {
+            use std::io::Cursor;
+            let image = image::load_from_memory(&bytes)?;
+            let mut cursor = Cursor::new(vec![]);
+            image.write_to(&mut cursor, image::ImageFormat::Png)?;
+            tokio::fs::write(&filepath, cursor.into_inner()).await?;
+            image
+        };
+        #[cfg(not(feature = "image"))]
+        let image = {
+            tokio::fs::write(&filepath, bytes.as_ref()).await?;
+            bytes.to_vec()
+        };
         info!("Downloaded image to {}", filepath.display());
         Ok((filepath, image))
     }
@@ -71,7 +86,7 @@ impl DingtalkResource for CallbackMessagePayloadFile {
         &self,
         dingtalk: &DingTalkStream,
         save_to_dir: PathBuf,
-    ) -> crate::Result<(PathBuf, Vec<u8>)> {
+    ) -> crate::Result<(PathBuf, Self::T)> {
         if !save_to_dir.exists() {
             tokio::fs::create_dir_all(&save_to_dir).await?;
         }
