@@ -1,5 +1,4 @@
-use crate::client::{ConnectionResponse, StopSignalSender, Subscription};
-use crate::frames::OK;
+use crate::client::{ConnectionResponse, Subscription};
 use crate::utils::get_local_ip;
 use crate::{DingTalkStream, MessageTopic, GATEWAY_URL};
 use anyhow::anyhow;
@@ -16,7 +15,6 @@ impl DingTalkStream {
     /// Start the client and run forever (auto-reconnect)
     pub async fn start_forever(&mut self) {
         info!("Starting DingTalk Stream client...");
-
         loop {
             match self.connect().await {
                 Ok(_) => {
@@ -30,7 +28,6 @@ impl DingTalkStream {
             if !self.config.auto_reconnect {
                 break;
             }
-
             info!(
                 "Reconnecting in {} seconds...",
                 self.config.reconnect_interval.as_secs()
@@ -59,29 +56,14 @@ impl DingTalkStream {
         self.connected.store(true, Ordering::SeqCst);
         info!("Connected to DingTalk WebSocket");
         // Create channel for sending messages
-        let (stream_tx, mut stream_rx) = mpsc::channel::<String>(1024);
-        let mut stop_signal_rx = {
-            let (tx, rx) = mpsc::channel::<()>(1);
-            let mut stop_tx = self.stop_tx.lock().await;
-            stop_tx.replace(StopSignalSender(tx));
-            rx
-        };
+        let (stream_tx, mut stream_rx) = mpsc::channel::<String>(128);
         // Spawn task to forward messages to WebSocket
         let write_task = tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    msg = stream_rx.recv() => {
-                        if let Some(msg) = msg {
-                            match ws_write.send(Message::Text(msg.into())).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!("Failed to send message to WebSocket: {}", e);
-                                    break;
-                                }
-                            }
-                        }
-                    },
-                    _ = stop_signal_rx.recv() => {
+            while let Some(msg) = stream_rx.recv().await {
+                match ws_write.send(Message::Text(msg.into())).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Failed to send message to WebSocket: {}", e);
                         break;
                     }
                 }
@@ -100,11 +82,15 @@ impl DingTalkStream {
                     });
                     match serde_json::to_string(&ping) {
                         Ok(ping) => {
-                            let Err(_) = stream_tx.send(ping).await else {
-                                continue;
-                            };
-                            warn!("stream_tx dropped, keepalive task stopping.");
-                            return;
+                            match stream_tx.send(ping).await {
+                                Ok(_) => {
+                                    continue;
+                                }
+                                Err(err) => {
+                                    warn!("stream_tx dropped error, keepalive task stopping. err: {err}");
+                                    return;
+                                }
+                            }
                         }
                         Err(err) => {
                             error!("write ping to json failed: {err}")

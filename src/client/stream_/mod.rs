@@ -1,11 +1,11 @@
 use crate::client::AccessTokenCache;
+use crate::frames::RobotMessage;
 use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
-use crate::frames::RobotMessage;
+use tokio::sync::RwLock;
 
 mod access_token;
 mod handle_message;
@@ -30,8 +30,6 @@ pub struct DingTalkStream {
     connected: AtomicBool,
     /// Whether registered
     registered: AtomicBool,
-    /// Stop signal sender
-    pub stop_tx: Arc<Mutex<Option<StopSignalSender>>>,
     /// Access token cache
     access_token: Arc<RwLock<Option<AccessTokenCache>>>,
     http_client: reqwest::Client,
@@ -54,21 +52,9 @@ impl DingTalkStream {
             ws_url: None,
             connected: AtomicBool::new(false),
             registered: AtomicBool::new(false),
-            stop_tx: Default::default(),
             access_token: Default::default(),
             http_client: reqwest::Client::default(),
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct StopSignalSender(pub(super) tokio::sync::mpsc::Sender<()>);
-
-impl Deref for StopSignalSender {
-    type Target = tokio::sync::mpsc::Sender<()>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 

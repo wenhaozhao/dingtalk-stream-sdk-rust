@@ -176,34 +176,39 @@ impl DingTalkStream {
         if let (Ok(webhook_url), Some(timeout)) =
             (session_webhook.webhook_url(), session_webhook.timeout())
         {
-            loop {
-                tokio::select! {
-                    message = receiver.recv() => {
-                        if let Some(ref message@CallbackWebhookMessage{send_result_cb, ..}) = &message {
-                                  let response = http_client
-                            .post(webhook_url.clone())
-                            .header("Content-Type", "application/json")
-                            .header("Accept", "*/*")
-                            .json(&message)
-                            .send()
-                            .await;
-                            if let Some(cb) = send_result_cb {
-                                match response{
-                                    Ok(response)=>{
-                                        let code =response.status();
-                                        match response.text().await{
-                                            Ok(text)=>cb(Ok((code.as_u16(), text))),
-                                            Err(err)=> cb(Err(anyhow!("{err}"))),
-                                        }
-                                    },
-                                    Err(err)=> cb(Err(anyhow!("{err}"))),
+            match tokio::time::timeout(timeout, async {
+                while let Some(message) = receiver.recv().await {
+                    let message @ CallbackWebhookMessage { send_result_cb, .. } = &message;
+                    let response = http_client
+                        .post(webhook_url.clone())
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "*/*")
+                        .json(&message)
+                        .send()
+                        .await;
+                    if let Some(cb) = send_result_cb {
+                        match response {
+                            Ok(response) => {
+                                let code = response.status();
+                                match response.text().await {
+                                    Ok(text) => cb(Ok((code.as_u16(), text))),
+                                    Err(err) => cb(Err(anyhow!("{err}"))),
                                 }
                             }
+                            Err(err) => cb(Err(anyhow!("{err}"))),
                         }
                     }
-                    _ = tokio::time::sleep(timeout) =>{
-                        break;
-                    }
+                }
+            })
+            .await
+            {
+                Ok(()) => {}
+                Err(_) => {
+                    info!(
+                        "webhook_url: {} elapsed after {}",
+                        webhook_url,
+                        timeout.as_millis()
+                    )
                 }
             }
         }

@@ -86,7 +86,6 @@ async fn main() {
         .create_message_sender()
         .await;
 
-    let stop_tx = Arc::clone(&dingtalk_stream.stop_tx);
     // Start the client (will run forever with auto-reconnect)
     tokio::spawn(async move {
         dingtalk_stream.start_forever().await;
@@ -107,6 +106,4 @@ async fn main() {
             .await;
     }
     let _ = tokio::signal::ctrl_c().await;
-    let stop_tx = stop_tx.lock().await;
-    let _ = stop_tx.as_ref().unwrap().send(()).await;
 }
