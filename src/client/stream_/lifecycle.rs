@@ -1,4 +1,5 @@
 use crate::client::{ConnectionResponse, StopSignalSender, Subscription};
+use crate::frames::OK;
 use crate::utils::get_local_ip;
 use crate::{DingTalkStream, MessageTopic, GATEWAY_URL};
 use anyhow::anyhow;
@@ -50,11 +51,8 @@ impl DingTalkStream {
     async fn connect(&mut self) -> crate::Result<()> {
         let connection = self.open_connection().await.map_err(|err| anyhow!(err))?;
         let ws_url = format!("{}?ticket={}", connection.endpoint, connection.ticket);
-
         info!("Connecting to WebSocket: {}", ws_url);
-
         self.ws_url.replace(ws_url.clone());
-
         // Connect to WebSocket
         let (ws_stream, _) = connect_async(&ws_url).await?;
         let (mut ws_write, mut ws_read) = ws_stream.split();
@@ -89,7 +87,6 @@ impl DingTalkStream {
                 }
             }
         });
-
         // Spawn keep-alive task if enabled
         if self.config.keep_alive {
             let keep_alive_interval = self.config.keep_alive_interval;
@@ -116,8 +113,8 @@ impl DingTalkStream {
                 }
             });
         }
-
         // Handle incoming messages
+        let mut error = None;
         while let Some(msg) = ws_read.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
@@ -132,6 +129,7 @@ impl DingTalkStream {
                 }
                 Err(e) => {
                     error!("WebSocket error: {}", e);
+                    error.replace(e);
                     break;
                 }
                 _ => {}
@@ -140,7 +138,11 @@ impl DingTalkStream {
         write_task.abort();
         self.connected.store(false, Ordering::SeqCst);
         self.registered.store(false, Ordering::SeqCst);
-        Ok(())
+        if let Some(e) = error {
+            Err(e.into())
+        } else {
+            Ok(())
+        }
     }
 
     /// Open connection to DingTalk
