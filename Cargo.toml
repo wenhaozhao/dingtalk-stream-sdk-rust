@@ -23,13 +23,15 @@ once_cell = "1"
 parking_lot = "0.12"
 async-trait = "0.1"
 chrono = { version = "0.4" }
+md5 = { version = "0.8" }
+image = { version = "0.25", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 
 [features]
-default = ["rustls-tls-native-roots"]
 rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
+default = ["rustls-tls-native-roots", "image"]
 
 [lib]
 name = "dingtalk_stream"

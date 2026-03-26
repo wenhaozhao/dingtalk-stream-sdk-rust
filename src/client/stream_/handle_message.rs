@@ -155,7 +155,7 @@ impl DingTalkStream {
             warn!("No handler registered for topic: {}", topic);
             return Ok(());
         };
-        let (code, response_msg) = match handler.process(&cb_msg, sender).await {
+        let (code, response_msg) = match handler.process(&self, &cb_msg, sender).await {
             Ok(result) => (200, result.to_string()),
             Err(err) => (err.code as i32, err.msg),
         };

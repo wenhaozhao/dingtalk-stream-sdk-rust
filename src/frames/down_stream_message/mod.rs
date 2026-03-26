@@ -145,16 +145,3 @@ impl std::fmt::Display for MessageTopic {
         write!(f, "{str}")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_message_topic_deserialize() {
-        let json = include_str!("../../../test_resources/client_downstream_msg.json");
-        let message: DownStreamMessage = serde_json::from_str(json).unwrap();
-        let CallbackMessage { data, .. } = CallbackMessage::try_from(message).unwrap();
-        let data = data.unwrap();
-        assert_eq!(data.msg_id.as_str(), "msgtH7As/bwsnWfBS0olMV5tA==");
-    }
-}

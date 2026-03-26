@@ -8,14 +8,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod access_token;
+mod download_resources;
 mod handle_message;
 mod lifecycle;
 mod send_message;
+pub use download_resources::DingtalkResource;
 
 /// DingTalk Stream Client
 pub struct DingTalkStream {
     /// Credential for authentication
-    credential: Credential,
+    pub(super) credential: Credential,
     /// Client configuration
     config: ClientConfig,
     /// Event handler

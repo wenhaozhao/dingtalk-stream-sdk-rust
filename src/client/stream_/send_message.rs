@@ -14,7 +14,7 @@ impl super::DingTalkStream {
         let access_token = Arc::clone(&self.access_token);
         tokio::spawn(async move {
             while let Some(message) = receiver.recv().await {
-                match Self::get_access_token(&http_client, &credential, Arc::clone(&access_token))
+                match Self::get_access_token_(&http_client, &credential, Arc::clone(&access_token))
                     .await
                 {
                     Ok(access_token) => {
@@ -38,8 +38,6 @@ impl super::DingTalkStream {
                                     .await;
                             }
                         }
-                        
-           
                     }
                     Err(err) => {
                         warn!("Failed to get access token: {}", err);

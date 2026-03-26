@@ -5,8 +5,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 impl DingTalkStream {
+    pub(super) async fn get_access_token(&self) -> crate::Result<AccessToken> {
+        Self::get_access_token_(
+            &self.http_client,
+            &self.credential,
+            Arc::clone(&self.access_token),
+        )
+        .await
+    }
     /// Get access token
-    pub(super) async fn get_access_token(
+    pub(super) async fn get_access_token_(
         http_client: &reqwest::Client,
         credential: &Credential,
         access_token: Arc<RwLock<Option<AccessTokenCache>>>,

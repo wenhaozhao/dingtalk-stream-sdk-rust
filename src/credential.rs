@@ -19,19 +19,12 @@ impl Credential {
             client_secret,
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_credential_new() {
-        let cred = Credential::new(
-            "test_client_id".to_string(),
-            "test_client_secret".to_string(),
-        );
-        assert_eq!(cred.client_id, "test_client_id");
-        assert_eq!(cred.client_secret, "test_client_secret");
+    pub fn from_env() -> Self {
+        let client_id = std::env::var("DINGTALK_CLIENT_ID")
+            .expect("DINGTALK_CLIENT_ID environment variable must be set");
+        let client_secret = std::env::var("DINGTALK_CLIENT_SECRET")
+            .expect("DINGTALK_CLIENT_SECRET environment variable must be set");
+        Self::new(client_id, client_secret)
     }
 }

@@ -68,6 +68,9 @@ pub const GATEWAY_URL: &str = "https://api.dingtalk.com/v1.0/gateway/connections
 /// The DingTalk API endpoint for getting access tokens
 pub const GET_TOKEN_URL: &str = "https://api.dingtalk.com/v1.0/oauth2/accessToken";
 
+pub const MESSAGE_FILES_DOWNLOAD_URL: &str =
+    "https://api.dingtalk.com/v1.0/robot/messageFiles/download";
+
 pub const ROBOT_SEND_PRIVATE_MESSAGE: &str =
     "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend";
 

@@ -3,9 +3,10 @@
 //! This example demonstrates how to create a simple DingTalk bot that responds to messages.
 
 use async_trait::async_trait;
+use dingtalk_stream::client::DingtalkResource;
 use dingtalk_stream::frames::{
-    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RobotPrivateMessage,
-    UpMessageContent,
+    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RichTextItem,
+    RobotPrivateMessage, UpMessageContent,
 };
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
@@ -19,10 +20,13 @@ use std::time::Duration;
 /// Custom handler for robot messages
 struct RobotMessageHandler(MessageTopic);
 
+const TMP_DIR: &str = "/var/tmp";
+
 #[async_trait]
 impl CallbackHandler for RobotMessageHandler {
     async fn process(
         &self,
+        client: &DingTalkStream,
         message: &CallbackMessage,
         cb_webhook_msg_sender: Option<tokio::sync::mpsc::Sender<CallbackWebhookMessage>>,
     ) -> Result<Resp, Error> {
@@ -30,24 +34,79 @@ impl CallbackHandler for RobotMessageHandler {
         if let Some(data) = &message.data {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
             let CallbackMessageData { payload, .. } = &data;
-            if let Some(CallbackMessagePayload::Text { text }) = payload {
-                println!("Received message: {}", text.content);
-                // You would typically send a response back here
-                // For now, just echo the message
-                if let Some(sender) = cb_webhook_msg_sender {
-                    let _ = sender
-                        .send(CallbackWebhookMessage {
-                            content: UpMessageContent::Text {
-                                text: format!("echo {}", text.content).into(),
-                            },
-                            at: Default::default(),
-                            send_result_cb: Some(Arc::new(|result| {
-                                println!("Message sent result: {:?}", result);
-                            })),
-                        })
-                        .await;
+            match payload {
+                Some(CallbackMessagePayload::Text { text }) => {
+                    println!("Received message: {}", text.content);
+                    // You would typically send a response back here
+                    // For now, just echo the message
+                    if let Some(sender) = cb_webhook_msg_sender {
+                        let _ = sender
+                            .send(CallbackWebhookMessage {
+                                content: UpMessageContent::Text {
+                                    text: format!("echo {}", text.content).into(),
+                                },
+                                at: Default::default(),
+                                send_result_cb: Some(Arc::new(|result| {
+                                    println!("Message sent result: {:?}", result);
+                                })),
+                            })
+                            .await;
+                    }
+                    return Ok(Resp::Text(format!("Echo: {}", text.content)));
                 }
-                return Ok(Resp::Text(format!("Echo: {}", text.content)));
+                Some(CallbackMessagePayload::Picture { content }) => {
+                    match content
+                        .fetch(client, TMP_DIR.into())
+                        .await
+                    {
+                        Ok((filepath, image)) => {
+                            println!("Image fetched successfully: {}", filepath.display());
+                        }
+                        Err(err) => {
+                            println!("Error fetching image: {:?}", err);
+                        }
+                    }
+                    return Ok(Resp::Text("Echo: unexpected".to_string()));
+                }
+                Some(CallbackMessagePayload::File { content }) => {
+                    match content
+                        .fetch(client, TMP_DIR.into())
+                        .await
+                    {
+                        Ok((filepath, _)) => {
+                            println!("file fetched successfully: {}", filepath.display());
+                        }
+                        Err(err) => {
+                            println!("Error fetching file: {:?}", err);
+                        }
+                    }
+                    return Ok(Resp::Text("Echo: unexpected".to_string()));
+                }
+                Some(CallbackMessagePayload::RichText { content }) => {
+                    for content in content.iter() {
+                        match content {
+                            RichTextItem::Text(text) => {
+                                println!("{text}");
+                            }
+                            RichTextItem::Picture(content) => {
+                                match content
+                                    .fetch(client, TMP_DIR.into())
+                                    .await
+                                {
+                                    Ok((filepath, image)) => {
+                                        println!("{}", filepath.display());
+                                    }
+                                    Err(err) => {
+                                        println!("Error fetching image: {:?}", err);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    return Ok(Resp::Text("Echo: unexpected".to_string()));
+                }
             }
         }
         Err(Error {

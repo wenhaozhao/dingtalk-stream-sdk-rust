@@ -3,7 +3,7 @@
 //! Provides trait-based handlers for different message types
 
 use crate::frames::{CallbackMessage, CallbackWebhookMessage, EventMessage, SystemMessage};
-use crate::MessageTopic;
+use crate::{DingTalkStream, MessageTopic};
 use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
 use tokio::sync::mpsc::Sender;
@@ -12,7 +12,12 @@ use tokio::sync::mpsc::Sender;
 #[async_trait]
 pub trait CallbackHandler: Send + Sync {
     /// Process a callback message
-    async fn process(&self, message: &CallbackMessage, cb_webhook_msg_sender: Option<Sender<CallbackWebhookMessage>>) -> Result<Resp, Error>;
+    async fn process(
+        &self,
+        client: &DingTalkStream,
+        message: &CallbackMessage,
+        cb_webhook_msg_sender: Option<Sender<CallbackWebhookMessage>>,
+    ) -> Result<Resp, Error>;
 
     /// Pre-start hook
     fn pre_start(&self) {}

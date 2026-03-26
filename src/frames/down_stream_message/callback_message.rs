@@ -4,6 +4,8 @@ use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -170,6 +172,20 @@ pub struct Text {
     pub content: String,
 }
 
+impl Display for Text {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.content)
+    }
+}
+
+impl Deref for Text {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.content
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Picture {
     #[serde(rename = "downloadCode")]
@@ -196,18 +212,21 @@ pub struct RichText {
     pub content: Vec<RichTextItem>,
 }
 
+impl Deref for RichText {
+    type Target = [RichTextItem];
+
+    fn deref(&self) -> &Self::Target {
+        &self.content
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RichTextItem {
     #[serde(rename = "picture")]
-    Picture {
-        #[serde(rename = "downloadCode")]
-        download_code: String,
-        #[serde(rename = "pictureDownloadCode")]
-        picture_download_code: String,
-    },
+    Picture(Picture),
     #[serde(rename = "text", alias = "content")]
-    Text { text: String },
+    Text(Text),
 }
 
 #[cfg(test)]
@@ -265,11 +284,17 @@ mod tests {
         }) = &data.payload
         {
             assert!(rich_text.len() > 0);
-            if let RichTextItem::Picture { download_code, .. } = rich_text.get(0).unwrap() {
+            if let RichTextItem::Picture(Picture { download_code, .. }) = rich_text.get(0).unwrap()
+            {
                 assert!(download_code
                     .starts_with("mIofN681YE3f/+m+NntqpeLZQiMFIZMEPWAhjFjD1g5L/SdG/3lCmLWzq"));
             } else {
                 panic!("Expected picture payload but got {:?}", data.payload);
+            }
+            if let RichTextItem::Text(Text { content }) = rich_text.get(2).unwrap() {
+                assert!(content.eq("abc"));
+            } else {
+                panic!("Expected text payload but got {:?}", data.payload);
             }
         } else {
             panic!("Expected picture payload but got {:?}", data.payload);
