@@ -73,18 +73,21 @@ impl DingTalkMedia_ {
     async fn upload_(&self, dingtalk: &DingTalkStream) -> crate::Result<MediaUploadResult> {
         let access_token = dingtalk.get_access_token().await?;
         let bytes = self.as_bytes().await?;
-        let md5 = format!("{:x}", md5::compute(&bytes));
-        let form = reqwest::multipart::Form::new().text("type", "file").part(
-            "media",
-            Part::bytes(bytes).file_name(md5).headers({
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    "Content-Type",
-                    HeaderValue::from_static("application/octet-stream"),
-                );
-                headers
-            }),
-        );
+
+        let filename = self.filename()?;
+        let form = reqwest::multipart::Form::new()
+            .text("type", self.type_().to_string())
+            .part(
+                "media",
+                Part::bytes(bytes).file_name(filename).headers({
+                    let mut headers = HeaderMap::new();
+                    headers.insert(
+                        "Content-Type",
+                        HeaderValue::from_static("application/octet-stream"),
+                    );
+                    headers
+                }),
+            );
         let result = dingtalk
             .http_client
             .post(crate::MEDIA_UPLOAD_URL)
@@ -236,17 +239,30 @@ impl Display for MediaType {
 
 #[derive(Debug, Clone)]
 pub enum MediaContent {
-    Bytes(Vec<u8>),
+    Bytes { filename: String, bytes: Vec<u8> },
     Filepath(PathBuf),
-    Url(Url),
+    Url { filename: String, url: Url },
+}
+
+impl MediaContent {
+    fn filename(&self) -> crate::Result<String> {
+        match self {
+            MediaContent::Bytes { filename, .. } => Ok(filename.to_string()),
+            MediaContent::Filepath(filepath) => filepath
+                .file_name()
+                .map(|it| it.to_string_lossy().to_string())
+                .ok_or(anyhow!("parse filename failed")),
+            MediaContent::Url { filename, .. } => Ok(filename.to_string()),
+        }
+    }
 }
 
 impl MediaContent {
     async fn as_bytes(&self) -> crate::Result<Vec<u8>> {
         match self {
-            MediaContent::Bytes(bytes) => Ok(bytes.clone()),
+            MediaContent::Bytes { bytes, .. } => Ok(bytes.clone()),
             MediaContent::Filepath(path) => Ok(tokio::fs::read(path).await?),
-            MediaContent::Url(url) => {
+            MediaContent::Url { url, .. } => {
                 let response = reqwest::get(url.as_str()).await?;
                 Ok(response.bytes().await.map(|bytes| bytes.to_vec())?)
             }
@@ -254,9 +270,12 @@ impl MediaContent {
     }
 }
 
-impl From<Vec<u8>> for MediaContent {
-    fn from(value: Vec<u8>) -> Self {
-        MediaContent::Bytes(value)
+impl<Filename: AsRef<str>> From<(Filename, Vec<u8>)> for MediaContent {
+    fn from((filename, bytes): (Filename, Vec<u8>)) -> Self {
+        MediaContent::Bytes {
+            filename: filename.as_ref().to_string(),
+            bytes,
+        }
     }
 }
 
@@ -272,9 +291,12 @@ impl From<&Path> for MediaContent {
     }
 }
 
-impl From<Url> for MediaContent {
-    fn from(value: Url) -> Self {
-        MediaContent::Url(value)
+impl<Filename: AsRef<str>> From<(Filename, Url)> for MediaContent {
+    fn from((filename, value): (Filename, Url)) -> Self {
+        MediaContent::Url {
+            filename: filename.as_ref().to_string(),
+            url: value,
+        }
     }
 }
 
@@ -320,11 +342,11 @@ where
             .try_into()
             .map_err(|_| anyhow!("unexpected media-type"))?;
         let content = content.into();
-        Ok(match type_ {
-            MediaType::Image => Self::Image(content.into()),
-            MediaType::Voice => Self::Voice(content.into()),
-            MediaType::File => Self::File(content.into()),
-            MediaType::Video => Self::Video(content.into()),
-        })
+        match type_ {
+            MediaType::Image => Ok(Self::Image(content.into())),
+            MediaType::Voice => Ok(Self::Voice(content.into())),
+            MediaType::File => Ok(Self::File(content.into())),
+            MediaType::Video => Ok(Self::Video(content.into())),
+        }
     }
 }
