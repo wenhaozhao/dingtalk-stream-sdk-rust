@@ -3,7 +3,7 @@
 //! This example demonstrates how to create a simple DingTalk bot that responds to messages.
 
 use async_trait::async_trait;
-use dingtalk_stream::client::DingtalkResource;
+use dingtalk_stream::client::{DingTalkMedia, DingtalkResource, MediaImage};
 use dingtalk_stream::frames::{
     CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RichTextItem,
     RobotPrivateMessage, UpMessageContent,
@@ -13,6 +13,8 @@ use dingtalk_stream::{
     CallbackHandler, CallbackMessage, Credential, DingTalkStream, MessageTopic, TOPIC_ROBOT,
 };
 use std::env;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::Duration;
@@ -55,11 +57,8 @@ impl CallbackHandler for RobotMessageHandler {
                     return Ok(Resp::Text(format!("Echo: {}", text.content)));
                 }
                 Some(CallbackMessagePayload::Picture { content }) => {
-                    match content
-                        .fetch(client, TMP_DIR.into())
-                        .await
-                    {
-                        Ok((filepath, image)) => {
+                    match content.fetch(client, TMP_DIR.into()).await {
+                        Ok((filepath, _)) => {
                             println!("Image fetched successfully: {}", filepath.display());
                         }
                         Err(err) => {
@@ -69,10 +68,7 @@ impl CallbackHandler for RobotMessageHandler {
                     return Ok(Resp::Text("Echo: unexpected".to_string()));
                 }
                 Some(CallbackMessagePayload::File { content }) => {
-                    match content
-                        .fetch(client, TMP_DIR.into())
-                        .await
-                    {
+                    match content.fetch(client, TMP_DIR.into()).await {
                         Ok((filepath, _)) => {
                             println!("file fetched successfully: {}", filepath.display());
                         }
@@ -89,11 +85,8 @@ impl CallbackHandler for RobotMessageHandler {
                                 println!("{text}");
                             }
                             RichTextItem::Picture(content) => {
-                                match content
-                                    .fetch(client, TMP_DIR.into())
-                                    .await
-                                {
-                                    Ok((filepath, image)) => {
+                                match content.fetch(client, TMP_DIR.into()).await {
+                                    Ok((filepath, _)) => {
                                         println!("{}", filepath.display());
                                     }
                                     Err(err) => {
@@ -145,24 +138,29 @@ async fn main() {
         .create_message_sender()
         .await;
 
+    let media_image = MediaImage::from(PathBuf::from_str("test_resources/img.png").unwrap());
+
+    let result = media_image.upload(&dingtalk_stream).await.unwrap();
+
+    println!("Media upload result: {:?}", result);
+
     // Start the client (will run forever with auto-reconnect)
     tokio::spawn(async move {
         dingtalk_stream.start_forever().await;
     });
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let _ = message_sender
-            .send(
-                RobotPrivateMessage {
-                    user_ids: vec!["12345".into()],
-                    content: "Hello, World!".into(),
-                    send_result_cb: Some(Arc::new(|result| {
-                        println!("{result:?}");
-                    })),
-                }
-                .into(),
-            )
-            .await;
-    }
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let _ = message_sender
+        .send(
+            RobotPrivateMessage {
+                user_ids: vec!["12345".into()],
+                content: "Hello, World!".into(),
+                send_result_cb: Some(Arc::new(|result| {
+                    println!("{result:?}");
+                })),
+            }
+            .into(),
+        )
+        .await;
     let _ = tokio::signal::ctrl_c().await;
 }

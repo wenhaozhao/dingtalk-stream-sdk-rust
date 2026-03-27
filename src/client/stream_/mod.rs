@@ -9,6 +9,8 @@ use tokio::sync::RwLock;
 
 mod access_token;
 mod download_resources;
+mod upload_resources;
+pub use upload_resources::*;
 mod handle_message;
 mod lifecycle;
 mod send_message;

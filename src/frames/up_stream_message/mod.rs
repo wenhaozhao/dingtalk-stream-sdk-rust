@@ -6,6 +6,7 @@ pub use callback_message::{
 use serde::{Deserialize, Serialize};
 
 mod robot_message;
+use crate::frames::UpMessageContent;
 pub use robot_message::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,10 +14,27 @@ pub use robot_message::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
 pub enum MessageContent {
     #[serde(rename = "text")]
     Text { text: MessageContentText },
+    #[serde(rename = "picture")]
+    Picture { picture: MessageContentPicture },
     #[serde(rename = "markdown")]
     Markdown { markdown: MessageContentMarkdown },
     #[serde(rename = "link")]
     Link { link: MessageContentLink },
+}
+
+impl UpMessageContent {
+    pub fn to_up_msg(&self) -> crate::Result<(&'static str, String)> {
+        Ok(match self {
+            UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
+            UpMessageContent::Picture { picture } => {
+                ("sampleImageMsg", serde_json::to_string(picture)?)
+            }
+            UpMessageContent::Markdown { markdown } => {
+                ("sampleMarkdown", serde_json::to_string(markdown)?)
+            }
+            UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
+        })
+    }
 }
 
 impl<T: Into<String>> From<T> for MessageContent {
@@ -42,6 +60,26 @@ impl<T: Into<String>> From<T> for MessageContentText {
     fn from(value: T) -> Self {
         Self {
             content: value.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageContentPicture {
+    #[serde(rename = "photoURL")]
+    photo_url: String,
+}
+
+impl From<MessageContentPicture> for MessageContent {
+    fn from(value: MessageContentPicture) -> Self {
+        Self::Picture { picture: value }
+    }
+}
+
+impl<T: Into<String>> From<T> for MessageContentPicture {
+    fn from(value: T) -> Self {
+        Self {
+            photo_url: value.into(),
         }
     }
 }

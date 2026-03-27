@@ -1,5 +1,5 @@
 use crate::client::DingtalkMessageSender;
-use crate::frames::{RobotGroupMessage, RobotMessage, RobotPrivateMessage, UpMessageContent};
+use crate::frames::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
 use crate::{ROBOT_SEND_GROUP_MESSAGE, ROBOT_SEND_PRIVATE_MESSAGE};
 use anyhow::anyhow;
 use serde_json::json;
@@ -17,28 +17,26 @@ impl super::DingTalkStream {
                 match Self::get_access_token_(&http_client, &credential, Arc::clone(&access_token))
                     .await
                 {
-                    Ok(access_token) => {
-                        match message{
-                            RobotMessage::Private(message) =>{
-                                let _ = Self::send_private_message(
-                                    &http_client,
-                                    &access_token,
-                                    &credential.client_id,
-                                    &message,
-                                )
-                                    .await;
-                            },
-                            RobotMessage::Group(message)=>{
-                                let _ = Self::send_group_message(
-                                    &http_client,
-                                    &access_token,
-                                    &credential.client_id,
-                                    &message,
-                                )
-                                    .await;
-                            }
+                    Ok(access_token) => match message {
+                        RobotMessage::Private(message) => {
+                            let _ = Self::send_private_message(
+                                &http_client,
+                                &access_token,
+                                &credential.client_id,
+                                &message,
+                            )
+                            .await;
                         }
-                    }
+                        RobotMessage::Group(message) => {
+                            let _ = Self::send_group_message(
+                                &http_client,
+                                &access_token,
+                                &credential.client_id,
+                                &message,
+                            )
+                            .await;
+                        }
+                    },
                     Err(err) => {
                         warn!("Failed to get access token: {}", err);
                     }
@@ -47,7 +45,9 @@ impl super::DingTalkStream {
         });
         (self, DingtalkMessageSender(sender))
     }
+}
 
+impl super::DingTalkStream {
     async fn send_private_message(
         http_client: &reqwest::Client,
         access_token: &str,
@@ -58,13 +58,7 @@ impl super::DingTalkStream {
             send_result_cb,
         }: &RobotPrivateMessage,
     ) -> crate::Result<()> {
-        let (msg_key, msg_param) = match content {
-            UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
-            UpMessageContent::Markdown { markdown } => {
-                ("sampleMarkdown", serde_json::to_string(markdown)?)
-            }
-            UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
-        };
+        let (msg_key, msg_param) = content.to_up_msg()?;
         let response = http_client
             .post(ROBOT_SEND_PRIVATE_MESSAGE)
             .header("x-acs-dingtalk-access-token", access_token)
@@ -102,13 +96,7 @@ impl super::DingTalkStream {
             send_result_cb,
         }: &RobotGroupMessage,
     ) -> crate::Result<()> {
-        let (msg_key, msg_param) = match content {
-            UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
-            UpMessageContent::Markdown { markdown } => {
-                ("sampleMarkdown", serde_json::to_string(markdown)?)
-            }
-            UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
-        };
+        let (msg_key, msg_param) = content.to_up_msg()?;
         let response = http_client
             .post(ROBOT_SEND_GROUP_MESSAGE)
             .header("x-acs-dingtalk-access-token", access_token)

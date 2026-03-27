@@ -54,7 +54,7 @@ pub use credential::Credential;
 pub use frames::{
     AckMessage, CallbackMessage, EventMessage, MessageHeaders, MessageTopic, SystemMessage,
 };
-pub use handlers::{CallbackHandler, Error, ErrorCode, EventHandler, Resp, SystemHandler};
+pub use handlers::{CallbackHandler, Error as HandlerError, ErrorCode, EventHandler, Resp, SystemHandler};
 
 // Re-export for convenience
 pub use client::ClientConfig;
@@ -70,6 +70,8 @@ pub const GET_TOKEN_URL: &str = "https://api.dingtalk.com/v1.0/oauth2/accessToke
 
 pub const MESSAGE_FILES_DOWNLOAD_URL: &str =
     "https://api.dingtalk.com/v1.0/robot/messageFiles/download";
+
+pub const MEDIA_UPLOAD_URL: &str = "https://oapi.dingtalk.com/media/upload";
 
 pub const ROBOT_SEND_PRIVATE_MESSAGE: &str =
     "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend";
