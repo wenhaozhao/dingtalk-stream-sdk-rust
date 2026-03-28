@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
+use std::sync::Arc;
 
 mod down_stream_message;
 pub use down_stream_message::{
@@ -138,4 +139,49 @@ impl AckMessage {
             data: Some(serde_json::to_string(&response).unwrap_or_default()),
         }
     }
+}
+
+pub type SendMessageCallbackFn =
+    dyn Fn(Result<SendMessageCallbackData, anyhow::Error>) + Send + Sync + 'static;
+#[derive(Clone)]
+pub struct SendMessageCallback(Arc<SendMessageCallbackFn>);
+
+impl Deref for SendMessageCallback {
+    type Target = SendMessageCallbackFn;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl<F> From<F> for SendMessageCallback
+where
+    F: Fn(Result<SendMessageCallbackData, anyhow::Error>) + Send + Sync + 'static,
+{
+    fn from(value: F) -> Self {
+        SendMessageCallback(Arc::new(value))
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct OptionSendMessageCallback(Option<SendMessageCallback>);
+
+impl<T: Into<SendMessageCallback>> From<T> for OptionSendMessageCallback {
+    fn from(value: T) -> Self {
+        Self(Some(value.into()))
+    }
+}
+
+impl Deref for OptionSendMessageCallback {
+    type Target = Option<SendMessageCallback>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SendMessageCallbackData {
+    pub http_status: u16,
+    pub text: String,
 }

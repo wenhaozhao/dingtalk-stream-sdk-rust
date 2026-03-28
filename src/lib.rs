@@ -52,9 +52,13 @@ pub mod utils;
 pub use client::DingTalkStream;
 pub use credential::Credential;
 pub use frames::{
-    AckMessage, CallbackMessage, EventMessage, MessageHeaders, MessageTopic, SystemMessage,
+    AckMessage, CallbackMessage, EventMessage, MessageHeaders, MessageTopic,
+    OptionSendMessageCallback, SendMessageCallback, SendMessageCallbackData, SendMessageCallbackFn,
+    SystemMessage,
 };
-pub use handlers::{CallbackHandler, Error as HandlerError, ErrorCode, EventHandler, Resp, SystemHandler};
+pub use handlers::{
+    CallbackHandler, Error as HandlerError, ErrorCode, EventHandler, Resp, SystemHandler,
+};
 
 // Re-export for convenience
 pub use client::ClientConfig;

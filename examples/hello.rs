@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use dingtalk_stream::client::{DingTalkMedia, DingtalkResource, MediaImage};
 use dingtalk_stream::frames::{
     CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RichTextItem,
-    RobotPrivateMessage, UpMessageContent,
+    RobotMessage, RobotPrivateMessage, UpMessageContent,
 };
 use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
 use dingtalk_stream::{
@@ -143,14 +143,13 @@ async fn main() {
 
     let _ = dingtalk_stream
         .send_message(
-            RobotPrivateMessage {
+            RobotMessage::from(RobotPrivateMessage {
                 user_ids: vec!["12345".into()],
                 content: "Hello, World!".into(),
-                send_result_cb: Some(Arc::new(|result| {
-                    println!("{result:?}");
-                })),
-            }
-            .into(),
+            })
+            .with_cb(|result| {
+                println!("{result:?}");
+            }),
         )
         .await;
     let _ = tokio::signal::ctrl_c().await;

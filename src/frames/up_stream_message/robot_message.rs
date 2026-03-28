@@ -1,27 +1,49 @@
 /*
 
 */
-use crate::frames::{DingTalkGroupConversationId, DingTalkUserId};
+use crate::frames::{DingTalkGroupConversationId, DingTalkUserId, OptionSendMessageCallback};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum RobotMessage {
-    Private(RobotPrivateMessage),
-    Group(RobotGroupMessage),
+    Private {
+        message: RobotPrivateMessage,
+        #[serde(skip)]
+        send_result_cb: OptionSendMessageCallback,
+    },
+    Group {
+        message: RobotGroupMessage,
+        #[serde(skip)]
+        send_result_cb: OptionSendMessageCallback,
+    },
+}
+
+impl RobotMessage {
+    pub fn with_cb<T: Into<OptionSendMessageCallback>>(self, cb: T) -> Self {
+        match self {
+            RobotMessage::Private { message, .. } => Self::Private {
+                message,
+                send_result_cb: cb.into(),
+            },
+            RobotMessage::Group { message, .. } => Self::Group {
+                message,
+                send_result_cb: cb.into(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RobotPrivateMessage {
     pub user_ids: Vec<DingTalkUserId>,
     pub content: super::MessageContent,
-    #[serde(skip)]
-    pub send_result_cb:
-        Option<Arc<dyn Fn(Result<(u16, String), anyhow::Error>) + Send + Sync + 'static>>,
 }
 
 impl From<RobotPrivateMessage> for RobotMessage {
-    fn from(value: RobotPrivateMessage) -> Self {
-        Self::Private(value)
+    fn from(message: RobotPrivateMessage) -> Self {
+        Self::Private {
+            message,
+            send_result_cb: Default::default(),
+        }
     }
 }
 
@@ -29,13 +51,13 @@ impl From<RobotPrivateMessage> for RobotMessage {
 pub struct RobotGroupMessage {
     pub group_id: DingTalkGroupConversationId,
     pub content: super::MessageContent,
-    #[serde(skip)]
-    pub send_result_cb:
-        Option<Arc<dyn Fn(Result<(u16, String), anyhow::Error>) + Send + Sync + 'static>>,
 }
 
 impl From<RobotGroupMessage> for RobotMessage {
-    fn from(value: RobotGroupMessage) -> Self {
-        Self::Group(value)
+    fn from(message: RobotGroupMessage) -> Self {
+        Self::Group {
+            message,
+            send_result_cb: Default::default(),
+        }
     }
 }
