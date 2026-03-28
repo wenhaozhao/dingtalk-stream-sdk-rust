@@ -1,5 +1,4 @@
 use crate::frames::{DingTalkGroupConversationId, DingTalkPrivateConversationId, DingTalkUserId};
-use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -8,6 +7,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::time::Duration;
+use crate::frames::down_message::{DownStreamMessage, MessageHeaders};
 
 /// Callback message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +16,7 @@ pub struct CallbackMessage {
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
     pub headers: MessageHeaders,
-    pub data: Option<Data>,
+    pub data: Option<MessageData>,
     #[serde(flatten)]
     pub extensions: HashMap<String, serde_json::Value>,
 }
@@ -33,7 +33,7 @@ impl TryFrom<DownStreamMessage> for CallbackMessage {
             extensions,
         }: DownStreamMessage,
     ) -> crate::Result<Self> {
-        if let super::Type::Callback = r#type {
+        if let super::MessageType::Callback = r#type {
             Ok(Self {
                 spec_version,
                 headers,
@@ -51,13 +51,13 @@ impl TryFrom<DownStreamMessage> for CallbackMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Data {
+pub struct MessageData {
     #[serde(rename = "msgId")]
     pub msg_id: String,
     #[serde(flatten)]
     pub conversation: Conversation,
     #[serde(flatten)]
-    pub sender: Sender,
+    pub sender: MessageSender,
     #[serde(flatten)]
     pub session_webhook: Option<SessionWebhook>,
     #[serde(flatten)]
@@ -69,7 +69,7 @@ pub struct Data {
     #[serde(rename = "senderPlatform")]
     pub sender_platform: Option<String>,
     #[serde(flatten)]
-    pub payload: Option<Payload>,
+    pub payload: Option<MessagePayload>,
     #[serde(rename = "atUsers")]
     pub at_users: Option<Vec<AtUser>>,
     #[serde(rename = "isInAtList")]
@@ -96,7 +96,7 @@ pub enum Conversation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Sender {
+pub struct MessageSender {
     #[serde(rename = "senderId")]
     pub sender_id: String,
     #[serde(rename = "senderNick")]
@@ -155,30 +155,30 @@ pub struct AtUser {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msgtype")]
-pub enum Payload {
+pub enum MessagePayload {
     #[serde(rename = "text")]
-    Text { text: Text },
+    Text { text: PayloadText },
     #[serde(rename = "picture")]
-    Picture { content: Picture },
+    Picture { content: PayloadPicture },
     #[serde(rename = "file")]
-    File { content: File },
+    File { content: PayloadFile },
     #[serde(rename = "richText")]
-    RichText { content: RichText },
+    RichText { content: PayloadRichText },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Text {
+pub struct PayloadText {
     #[serde(rename = "content", alias = "text")]
     pub content: String,
 }
 
-impl Display for Text {
+impl Display for PayloadText {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.content)
     }
 }
 
-impl Deref for Text {
+impl Deref for PayloadText {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -187,7 +187,7 @@ impl Deref for Text {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Picture {
+pub struct PayloadPicture {
     #[serde(rename = "downloadCode")]
     pub download_code: String,
     #[serde(rename = "pictureDownloadCode")]
@@ -195,7 +195,7 @@ pub struct Picture {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct File {
+pub struct PayloadFile {
     #[serde(rename = "downloadCode")]
     pub download_code: String,
     #[serde(rename = "fileId")]
@@ -207,12 +207,12 @@ pub struct File {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RichText {
+pub struct PayloadRichText {
     #[serde(rename = "richText")]
     pub content: Vec<RichTextItem>,
 }
 
-impl Deref for RichText {
+impl Deref for PayloadRichText {
     type Target = [RichTextItem];
 
     fn deref(&self) -> &Self::Target {
@@ -224,21 +224,24 @@ impl Deref for RichText {
 #[serde(untagged)]
 pub enum RichTextItem {
     #[serde(rename = "picture")]
-    Picture(Picture),
+    Picture(PayloadPicture),
     #[serde(rename = "text", alias = "content")]
-    Text(Text),
+    Text(PayloadText),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Data, File, Payload, Picture, RichText, RichTextItem, Text};
+    use super::{
+        MessageData, MessagePayload, PayloadFile, PayloadPicture, PayloadRichText, PayloadText,
+        RichTextItem,
+    };
 
     #[test]
     fn test_text_parse() {
-        let data: Data = serde_json::from_str(TEXT_JSON).unwrap();
+        let data: MessageData = serde_json::from_str(TEXT_JSON).unwrap();
         assert_eq!(data.msg_id.as_str(), "msgBjXREkdlZkfTfrIiQomjAw==");
-        if let Some(Payload::Text {
-            text: Text { content },
+        if let Some(MessagePayload::Text {
+            text: PayloadText { content },
         }) = data.payload
         {
             assert_eq!(content, "hello");
@@ -248,10 +251,10 @@ mod tests {
     }
     #[test]
     fn test_picture_parse() {
-        let data: Data = serde_json::from_str(PICTURE_JSON).unwrap();
+        let data: MessageData = serde_json::from_str(PICTURE_JSON).unwrap();
         assert_eq!(data.msg_id.as_str(), "msgmJpewjjmDF5LPJdRs9n/ZA==");
-        if let Some(Payload::Picture {
-            content: Picture { download_code, .. },
+        if let Some(MessagePayload::Picture {
+            content: PayloadPicture { download_code, .. },
         }) = data.payload
         {
             assert!(download_code.starts_with("mIofN681YE3f/+m+NntqpSkhBVXbzJynU"));
@@ -262,10 +265,10 @@ mod tests {
 
     #[test]
     fn test_file_parse() {
-        let data: Data = serde_json::from_str(FILE_JSON).unwrap();
+        let data: MessageData = serde_json::from_str(FILE_JSON).unwrap();
         assert_eq!(data.msg_id.as_str(), "msgBCO626EXCHXfZoDioTCPxg==");
-        if let Some(Payload::File {
-            content: File { file_id, .. },
+        if let Some(MessagePayload::File {
+            content: PayloadFile { file_id, .. },
         }) = data.payload
         {
             assert!(file_id.eq_ignore_ascii_case("214980176385"));
@@ -276,22 +279,23 @@ mod tests {
 
     #[test]
     fn test_rich_text_parse() {
-        let data: Data = serde_json::from_str(RICH_TEXT_JSON).unwrap();
+        let data: MessageData = serde_json::from_str(RICH_TEXT_JSON).unwrap();
         assert_eq!(data.msg_id.as_str(), "msgGDkZWYZlvw7rFtTHcDIFWw==");
-        if let Some(Payload::RichText {
-            content: RichText { content: rich_text },
+        if let Some(MessagePayload::RichText {
+            content: PayloadRichText { content: rich_text },
             ..
         }) = &data.payload
         {
             assert!(rich_text.len() > 0);
-            if let RichTextItem::Picture(Picture { download_code, .. }) = rich_text.get(0).unwrap()
+            if let RichTextItem::Picture(PayloadPicture { download_code, .. }) =
+                rich_text.get(0).unwrap()
             {
                 assert!(download_code
                     .starts_with("mIofN681YE3f/+m+NntqpeLZQiMFIZMEPWAhjFjD1g5L/SdG/3lCmLWzq"));
             } else {
                 panic!("Expected picture payload but got {:?}", data.payload);
             }
-            if let RichTextItem::Text(Text { content }) = rich_text.get(2).unwrap() {
+            if let RichTextItem::Text(PayloadText { content }) = rich_text.get(2).unwrap() {
                 assert!(content.eq("abc"));
             } else {
                 panic!("Expected text payload but got {:?}", data.payload);

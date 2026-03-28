@@ -1,6 +1,6 @@
 use crate::client::{ConnectionResponse, Subscription};
 use crate::utils::get_local_ip;
-use crate::{DingTalkStream, MessageTopic, GATEWAY_URL};
+use crate::{DingTalkStream, GATEWAY_URL};
 use anyhow::anyhow;
 use futures_util::{SinkExt, Stream, StreamExt};
 use std::fmt::Display;
@@ -14,6 +14,7 @@ use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
+use crate::frames::down_message::MessageTopic;
 
 impl DingTalkStream {
     /// Start the client and run forever (auto-reconnect)

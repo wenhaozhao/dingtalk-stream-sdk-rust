@@ -1,11 +1,11 @@
-use crate::{DownStreamMessage, MessageHeaders};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::frames::down_message::{DownStreamMessage, MessageHeaders};
 
-/// System message
+/// Event message
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemMessage {
+pub struct EventMessage {
     #[serde(rename = "specVersion")]
     pub spec_version: Option<String>,
     #[serde(rename = "type")]
@@ -15,7 +15,7 @@ pub struct SystemMessage {
     pub extensions: HashMap<String, serde_json::Value>,
 }
 
-impl TryFrom<DownStreamMessage> for SystemMessage {
+impl TryFrom<DownStreamMessage> for EventMessage {
     type Error = anyhow::Error;
 
     fn try_from(
@@ -27,7 +27,7 @@ impl TryFrom<DownStreamMessage> for SystemMessage {
             extensions,
         }: DownStreamMessage,
     ) -> crate::Result<Self> {
-        if let super::Type::System = r#type {
+        if let super::MessageType::Event = r#type {
             Ok(Self {
                 spec_version,
                 headers,
@@ -39,7 +39,7 @@ impl TryFrom<DownStreamMessage> for SystemMessage {
                 extensions,
             })
         } else {
-            Err(anyhow!("expected system message"))
+            Err(anyhow!("expected event message"))
         }
     }
 }

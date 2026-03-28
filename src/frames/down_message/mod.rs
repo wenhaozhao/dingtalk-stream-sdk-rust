@@ -1,19 +1,9 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
-mod system_message;
-pub use system_message::SystemMessage;
-mod event_message;
-pub use event_message::EventMessage;
-mod callback_message;
-pub use callback_message::{
-    CallbackMessage, Conversation as CallbackMessageConversation, Data as CallbackMessageData,
-    File as CallbackMessagePayloadFile, Payload as CallbackMessagePayload,
-    Picture as CallbackMessagePayloadPicture, RichText as CallbackMessagePayloadRichText,
-    RichTextItem, Sender as CallbackMessageSender, SessionWebhook,
-    Text as CallbackMessagePayloadText,
-};
-
+pub mod callback_message;
+pub mod event_message;
+pub mod system_message;
 /// Base message structure for downstream messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownStreamMessage {
@@ -21,14 +11,14 @@ pub struct DownStreamMessage {
     pub spec_version: Option<String>,
     pub headers: MessageHeaders,
     #[serde(rename = "type")]
-    pub r#type: Type,
+    pub r#type: MessageType,
     pub data: Option<String>,
     #[serde(flatten)]
     pub extensions: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Type {
+pub enum MessageType {
     #[serde(rename = "SYSTEM")]
     System,
     #[serde(rename = "EVENT")]
@@ -39,9 +29,9 @@ pub enum Type {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Data {
-    System(callback_message::Data),
-    Event(EventMessage),
-    Callback(CallbackMessage),
+    System(callback_message::MessageData),
+    Event(event_message::EventMessage),
+    Callback(callback_message::CallbackMessage),
 }
 
 /// Headers for all message types

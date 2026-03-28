@@ -1,5 +1,6 @@
 use crate::client::AccessTokenCache;
-use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
+use crate::handlers::{CallbackHandler, EventHandler, SystemHandler};
+use crate::{ClientConfig, Credential};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -12,6 +13,7 @@ pub use upload_resources::*;
 mod handle_message;
 mod lifecycle;
 mod send_message;
+use crate::frames::down_message::MessageTopic;
 pub use download_resources::DingtalkResource;
 
 /// DingTalk Stream Client

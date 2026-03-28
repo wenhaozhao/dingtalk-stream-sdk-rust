@@ -1,13 +1,7 @@
-mod callback_message;
-
-pub use callback_message::{
-    At as CallbackWebhookMessageAt, WebhookMessage as CallbackWebhookMessage,
-};
+pub mod callback_message;
 use serde::{Deserialize, Serialize};
 
-mod robot_message;
-use crate::frames::UpMessageContent;
-pub use robot_message::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
+pub mod robot_message;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msgtype")]
@@ -22,17 +16,17 @@ pub enum MessageContent {
     Link { link: MessageContentLink },
 }
 
-impl UpMessageContent {
-    pub fn to_up_msg(&self) -> crate::Result<(&'static str, String)> {
+impl MessageContent {
+    pub(crate) fn to_up_msg(&self) -> crate::Result<(&'static str, String)> {
         Ok(match self {
-            UpMessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
-            UpMessageContent::Picture { picture } => {
+            MessageContent::Text { text } => ("sampleText", serde_json::to_string(text)?),
+            MessageContent::Picture { picture } => {
                 ("sampleImageMsg", serde_json::to_string(picture)?)
             }
-            UpMessageContent::Markdown { markdown } => {
+            MessageContent::Markdown { markdown } => {
                 ("sampleMarkdown", serde_json::to_string(markdown)?)
             }
-            UpMessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
+            MessageContent::Link { .. } => ("sampleLink", serde_json::to_string(&())?),
         })
     }
 }

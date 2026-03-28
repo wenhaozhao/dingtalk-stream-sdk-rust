@@ -5,23 +5,10 @@
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::sync::Arc;
+use crate::frames::down_message::MessageHeaders;
 
-mod down_stream_message;
-pub use down_stream_message::{
-    CallbackMessage, CallbackMessageConversation, CallbackMessageData, CallbackMessagePayload,
-    CallbackMessagePayloadFile, CallbackMessagePayloadPicture, CallbackMessagePayloadRichText,
-    CallbackMessagePayloadText, CallbackMessageSender, Data as DownStreamMessageData,
-    DownStreamMessage, EventMessage, MessageHeaders, MessageTopic, RichTextItem, SessionWebhook,
-    SystemMessage, Type as MessageType,
-};
-
-mod up_stream_message;
-pub use up_stream_message::{
-    CallbackWebhookMessage, CallbackWebhookMessageAt, MessageContent as UpMessageContent,
-    MessageContentLink as UpMessageContentLink, MessageContentMarkdown as UpMessageContentMarkdown,
-    MessageContentText as UpMessageContentText, RobotGroupMessage, RobotMessage,
-    RobotPrivateMessage,
-};
+pub mod down_message;
+pub mod up_message;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DingTalkUserId(pub String);

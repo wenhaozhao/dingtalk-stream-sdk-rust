@@ -4,14 +4,17 @@
 
 use async_trait::async_trait;
 use dingtalk_stream::client::{DingTalkMedia, DingtalkResource, MediaImage};
-use dingtalk_stream::frames::{
-    CallbackMessageData, CallbackMessagePayload, CallbackWebhookMessage, RichTextItem,
-    RobotMessage, RobotPrivateMessage, UpMessageContent,
+use dingtalk_stream::frames::down_message::callback_message::{
+    CallbackMessage, MessageData, MessagePayload, RichTextItem,
 };
-use dingtalk_stream::handlers::{Error, ErrorCode, Resp};
-use dingtalk_stream::{
-    CallbackHandler, CallbackMessage, Credential, DingTalkStream, MessageTopic, TOPIC_ROBOT,
+use dingtalk_stream::frames::down_message::MessageTopic;
+use dingtalk_stream::frames::up_message::callback_message::WebhookMessage;
+use dingtalk_stream::frames::up_message::robot_message::{
+    RobotMessage, RobotPrivateMessage,
 };
+use dingtalk_stream::frames::up_message::MessageContent;
+use dingtalk_stream::handlers::{CallbackHandler, Error, ErrorCode, Resp};
+use dingtalk_stream::{Credential, DingTalkStream, TOPIC_ROBOT};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -29,21 +32,21 @@ impl CallbackHandler for RobotMessageHandler {
         &self,
         client: &DingTalkStream,
         message: &CallbackMessage,
-        cb_webhook_msg_sender: Option<tokio::sync::mpsc::Sender<CallbackWebhookMessage>>,
+        cb_webhook_msg_sender: Option<tokio::sync::mpsc::Sender<WebhookMessage>>,
     ) -> Result<Resp, Error> {
         // Extract text from the message
         if let Some(data) = &message.data {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            let CallbackMessageData { payload, .. } = &data;
+            let MessageData { payload, .. } = &data;
             match payload {
-                Some(CallbackMessagePayload::Text { text }) => {
+                Some(MessagePayload::Text { text }) => {
                     println!("Received message: {}", text.content);
                     // You would typically send a response back here
                     // For now, just echo the message
                     if let Some(sender) = cb_webhook_msg_sender {
                         let _ = sender
-                            .send(CallbackWebhookMessage {
-                                content: UpMessageContent::Text {
+                            .send(WebhookMessage {
+                                content: MessageContent::Text {
                                     text: format!("echo {}", text.content).into(),
                                 },
                                 at: Default::default(),
@@ -55,7 +58,7 @@ impl CallbackHandler for RobotMessageHandler {
                     }
                     return Ok(Resp::Text(format!("Echo: {}", text.content)));
                 }
-                Some(CallbackMessagePayload::Picture { content }) => {
+                Some(MessagePayload::Picture { content }) => {
                     match content.fetch(client, TMP_DIR.into()).await {
                         Ok((filepath, _)) => {
                             println!("Image fetched successfully: {}", filepath.display());
@@ -66,7 +69,7 @@ impl CallbackHandler for RobotMessageHandler {
                     }
                     return Ok(Resp::Text("Echo: unexpected".to_string()));
                 }
-                Some(CallbackMessagePayload::File { content }) => {
+                Some(MessagePayload::File { content }) => {
                     match content.fetch(client, TMP_DIR.into()).await {
                         Ok((filepath, _)) => {
                             println!("file fetched successfully: {}", filepath.display());
@@ -77,7 +80,7 @@ impl CallbackHandler for RobotMessageHandler {
                     }
                     return Ok(Resp::Text("Echo: unexpected".to_string()));
                 }
-                Some(CallbackMessagePayload::RichText { content }) => {
+                Some(MessagePayload::RichText { content }) => {
                     for content in content.iter() {
                         match content {
                             RichTextItem::Text(text) => {

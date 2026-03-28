@@ -1,13 +1,19 @@
-use crate::frames::{CallbackMessageData, CallbackWebhookMessage, MessageType, SessionWebhook};
-use crate::{
-    AckMessage, CallbackMessage, DingTalkStream, DownStreamMessage, EventMessage, MessageTopic,
-    SystemMessage,
+use crate::client::DingTalkStream;
+use crate::frames::down_message::{callback_message::SessionWebhook, MessageType};
+use crate::frames::{
+    down_message::{
+        event_message::EventMessage, system_message::SystemMessage, DownStreamMessage, MessageTopic,
+    },
+    AckMessage,
 };
+
 use anyhow::anyhow;
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, error, info, warn};
+use crate::frames::down_message::callback_message::{CallbackMessage, MessageData};
+use crate::frames::up_message::callback_message::WebhookMessage;
 
 impl DingTalkStream {
     /// Handle incoming message
@@ -136,7 +142,7 @@ impl DingTalkStream {
             warn!("Failed to parse callback message, skipping processing");
             return Ok(());
         };
-        let sender = if let Some(CallbackMessageData {
+        let sender = if let Some(MessageData {
             session_webhook: Some(session_webhook),
             ..
         }) = &cb_msg.data
@@ -171,14 +177,14 @@ impl DingTalkStream {
     async fn handle_webhook_message(
         http_client: reqwest::Client,
         session_webhook: SessionWebhook,
-        mut receiver: Receiver<CallbackWebhookMessage>,
+        mut receiver: Receiver<WebhookMessage>,
     ) {
         if let (Ok(webhook_url), Some(timeout)) =
             (session_webhook.webhook_url(), session_webhook.timeout())
         {
             match tokio::time::timeout(timeout, async {
                 while let Some(message) = receiver.recv().await {
-                    let message @ CallbackWebhookMessage { send_result_cb, .. } = &message;
+                    let message @ WebhookMessage { send_result_cb, .. } = &message;
                     let response = http_client
                         .post(webhook_url.clone())
                         .header("Content-Type", "application/json")

@@ -1,4 +1,4 @@
-use crate::frames::{CallbackMessagePayloadFile, CallbackMessagePayloadPicture};
+use crate::frames::down_message::callback_message::{PayloadFile, PayloadPicture};
 use crate::DingTalkStream;
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -25,7 +25,7 @@ type Picture = image::DynamicImage;
 type Picture = Vec<u8>;
 
 #[async_trait]
-impl DingtalkResource for CallbackMessagePayloadPicture {
+impl DingtalkResource for PayloadPicture {
     type T = Picture;
 
     async fn fetch(
@@ -79,7 +79,7 @@ impl DingtalkResource for CallbackMessagePayloadPicture {
 }
 
 #[async_trait]
-impl DingtalkResource for CallbackMessagePayloadFile {
+impl DingtalkResource for PayloadFile {
     type T = Vec<u8>;
 
     async fn fetch(

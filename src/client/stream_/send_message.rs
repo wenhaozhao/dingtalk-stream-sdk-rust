@@ -1,7 +1,5 @@
-use crate::frames::{
-    RobotGroupMessage, RobotMessage, RobotPrivateMessage, SendMessageCallback,
-    SendMessageCallbackData,
-};
+use crate::frames::up_message::robot_message::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
+use crate::frames::{SendMessageCallback, SendMessageCallbackData};
 use crate::{ROBOT_SEND_GROUP_MESSAGE, ROBOT_SEND_PRIVATE_MESSAGE};
 use anyhow::anyhow;
 use serde_json::json;

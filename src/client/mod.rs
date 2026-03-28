@@ -2,13 +2,13 @@
 //!
 //! The main client for connecting to DingTalk and handling messages
 
-use crate::MessageTopic;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
 
 mod stream_;
 pub use stream_::*;
+use crate::frames::down_message::MessageTopic;
 
 /// Client configuration
 #[derive(Debug, Clone)]
