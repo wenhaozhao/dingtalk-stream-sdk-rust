@@ -15,8 +15,6 @@ pub use stream_::*;
 pub struct ClientConfig {
     /// Whether to enable auto-reconnect
     pub auto_reconnect: bool,
-    /// Whether to keep alive the connection
-    pub keep_alive: bool,
     /// User agent string
     pub ua: String,
     /// Reconnect interval
@@ -29,7 +27,6 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             auto_reconnect: true,
-            keep_alive: true,
             ua: format!("dingtalk-sdk-rust/{}", crate::VERSION),
             reconnect_interval: Duration::from_secs(10),
             keep_alive_interval: Duration::from_secs(60),

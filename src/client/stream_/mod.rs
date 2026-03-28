@@ -28,8 +28,6 @@ pub struct DingTalkStream {
     callback_handlers: HashMap<MessageTopic, Box<dyn CallbackHandler>>,
     /// System handler
     system_handler: Option<Box<dyn SystemHandler>>,
-    /// WebSocket URL
-    ws_url: Option<String>,
     /// Whether connected
     connected: AtomicBool,
     /// Whether registered
@@ -53,7 +51,6 @@ impl DingTalkStream {
             event_handler: None,
             callback_handlers: HashMap::default(),
             system_handler: None,
-            ws_url: None,
             connected: AtomicBool::new(false),
             registered: AtomicBool::new(false),
             access_token: Default::default(),

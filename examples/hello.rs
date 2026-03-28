@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
-use std::time::Duration;
 
 /// Custom handler for robot messages
 struct RobotMessageHandler(MessageTopic);
@@ -131,27 +130,19 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let (mut dingtalk_stream, message_sender) = DingTalkStream::new(credential)
-        .register_callback_handler(RobotMessageHandler(MessageTopic::Callback(
-            TOPIC_ROBOT.to_string(),
-        )))
-        .create_message_sender()
-        .await;
+    let (dingtalk_stream, _) = Arc::new(DingTalkStream::new(credential).register_callback_handler(
+        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())),
+    ))
+    .start()
+    .await
+    .unwrap();
 
     let media_image = MediaImage::from(PathBuf::from_str("test_resources/img.png").unwrap());
-
     let result = media_image.upload(&dingtalk_stream).await.unwrap();
-
     println!("Media upload result: {:?}", result);
 
-    // Start the client (will run forever with auto-reconnect)
-    tokio::spawn(async move {
-        dingtalk_stream.start_forever().await;
-    });
-
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    let _ = message_sender
-        .send(
+    let _ = dingtalk_stream
+        .send_message(
             RobotPrivateMessage {
                 user_ids: vec!["12345".into()],
                 content: "Hello, World!".into(),

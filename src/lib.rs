@@ -38,7 +38,7 @@
 //!             MessageTopic::Callback(TOPIC_ROBOT.to_string()),
 //!         ));
 //!
-//!     client.start_forever().await;
+//!     client.start().await;
 //!     Ok(())
 //! }
 //! ```

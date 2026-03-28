@@ -1,49 +1,34 @@
-use crate::client::DingtalkMessageSender;
 use crate::frames::{RobotGroupMessage, RobotMessage, RobotPrivateMessage};
 use crate::{ROBOT_SEND_GROUP_MESSAGE, ROBOT_SEND_PRIVATE_MESSAGE};
 use anyhow::anyhow;
 use serde_json::json;
-use std::sync::Arc;
-use tracing::warn;
 
 impl super::DingTalkStream {
-    pub async fn create_message_sender(self) -> (Self, DingtalkMessageSender) {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+    pub async fn send_message(&self, message: RobotMessage) -> crate::Result<()> {
         let http_client = self.http_client.clone();
         let credential = self.credential.clone();
-        let access_token = Arc::clone(&self.access_token);
-        tokio::spawn(async move {
-            while let Some(message) = receiver.recv().await {
-                match Self::get_access_token_(&http_client, &credential, Arc::clone(&access_token))
-                    .await
-                {
-                    Ok(access_token) => match message {
-                        RobotMessage::Private(message) => {
-                            let _ = Self::send_private_message(
-                                &http_client,
-                                &access_token,
-                                &credential.client_id,
-                                &message,
-                            )
-                            .await;
-                        }
-                        RobotMessage::Group(message) => {
-                            let _ = Self::send_group_message(
-                                &http_client,
-                                &access_token,
-                                &credential.client_id,
-                                &message,
-                            )
-                            .await;
-                        }
-                    },
-                    Err(err) => {
-                        warn!("Failed to get access token: {}", err);
-                    }
-                }
+        let access_token = self.get_access_token().await?;
+        match message {
+            RobotMessage::Private(message) => {
+                let _ = Self::send_private_message(
+                    &http_client,
+                    &access_token,
+                    &credential.client_id,
+                    &message,
+                )
+                .await?;
             }
-        });
-        (self, DingtalkMessageSender(sender))
+            RobotMessage::Group(message) => {
+                let _ = Self::send_group_message(
+                    &http_client,
+                    &access_token,
+                    &credential.client_id,
+                    &message,
+                )
+                .await?;
+            }
+        };
+        Ok(())
     }
 }
 

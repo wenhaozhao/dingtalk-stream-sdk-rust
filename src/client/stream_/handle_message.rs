@@ -12,7 +12,7 @@ use tracing::{debug, error, info, warn};
 impl DingTalkStream {
     /// Handle incoming message
     pub(super) async fn handle_message(
-        &mut self,
+        &self,
         text: &str,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {
@@ -53,7 +53,7 @@ impl DingTalkStream {
 impl DingTalkStream {
     /// Handle system message
     async fn handle_system(
-        &mut self,
+        &self,
         msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {

@@ -2,10 +2,14 @@ use crate::client::{ConnectionResponse, Subscription};
 use crate::utils::get_local_ip;
 use crate::{DingTalkStream, MessageTopic, GATEWAY_URL};
 use anyhow::anyhow;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{SinkExt, Stream, StreamExt};
+use std::fmt::Display;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::Receiver;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
@@ -13,122 +17,178 @@ use tracing::{debug, error, info, warn};
 
 impl DingTalkStream {
     /// Start the client and run forever (auto-reconnect)
-    pub async fn start_forever(&mut self) {
+    pub async fn start(
+        self: Arc<Self>,
+    ) -> crate::Result<(Arc<Self>, JoinHandle<crate::Result<()>>)> {
         info!("Starting DingTalk Stream client...");
-        loop {
-            match self.connect().await {
-                Ok(_) => {
-                    info!("Connection closed normally");
-                    return;
-                }
-                Err(e) => {
-                    error!("Connection error: {}", e);
+        let self_ = Arc::clone(&self);
+        let join_handle = tokio::spawn(async move {
+            loop {
+                match Arc::clone(&self_).connect().await {
+                    Ok(_) => {
+                        info!("Connection closed normally");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        error!("Connection error: {}", e);
+                        if self_.config.auto_reconnect {
+                            info!(
+                                "Reconnecting in {} seconds...",
+                                self_.config.reconnect_interval.as_secs()
+                            );
+                            sleep(self_.config.reconnect_interval).await;
+                        } else {
+                            return Err(anyhow!(e));
+                        }
+                    }
                 }
             }
-            if !self.config.auto_reconnect {
-                break;
-            }
-            info!(
-                "Reconnecting in {} seconds...",
-                self.config.reconnect_interval.as_secs()
-            );
-            sleep(self.config.reconnect_interval).await;
-        }
-    }
-
-    /// Stop the client
-    pub async fn stop(stop_tx: Sender<()>) -> crate::Result<()> {
-        let _ = stop_tx.send(()).await;
-        Ok(())
+        });
+        Ok((self, join_handle))
     }
 }
 
 impl DingTalkStream {
     /// Connect to DingTalk WebSocket
-    async fn connect(&mut self) -> crate::Result<()> {
+    async fn connect(self: Arc<Self>) -> crate::Result<()> {
         let connection = self.open_connection().await.map_err(|err| anyhow!(err))?;
         let ws_url = format!("{}?ticket={}", connection.endpoint, connection.ticket);
         info!("Connecting to WebSocket: {}", ws_url);
-        self.ws_url.replace(ws_url.clone());
         // Connect to WebSocket
         let (ws_stream, _) = connect_async(&ws_url).await?;
-        let (mut ws_write, mut ws_read) = ws_stream.split();
+        let (ws_write, ws_read) = ws_stream.split();
         self.connected.store(true, Ordering::SeqCst);
         info!("Connected to DingTalk WebSocket");
-        // Create channel for sending messages
-        let (stream_tx, mut stream_rx) = mpsc::channel::<String>(128);
-        // Spawn task to forward messages to WebSocket
-        let write_task = tokio::spawn(async move {
-            while let Some(msg) = stream_rx.recv().await {
-                match ws_write.send(Message::Text(msg.into())).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("Failed to send message to WebSocket: {}", e);
-                        break;
-                    }
-                }
-            }
-        });
-        // Spawn keep-alive task if enabled
-        if self.config.keep_alive {
-            let keep_alive_interval = self.config.keep_alive_interval;
-            let stream_tx = stream_tx.clone();
-            tokio::spawn(async move {
-                loop {
-                    sleep(keep_alive_interval).await;
-                    let ping = serde_json::json!({
-                        "code": 200,
-                        "message": "ping"
-                    });
-                    match serde_json::to_string(&ping) {
-                        Ok(ping) => {
-                            match stream_tx.send(ping).await {
-                                Ok(_) => {
-                                    continue;
-                                }
-                                Err(err) => {
-                                    warn!("stream_tx dropped error, keepalive task stopping. err: {err}");
-                                    return;
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            error!("write ping to json failed: {err}")
-                        }
-                    }
-                }
-            });
+
+        let (ws_write_join_handle, ws_read_handle) = {
+            // Create channel for sending messages
+            let (msg_stream_sender, msg_stream_receiver) = mpsc::channel::<String>(256);
+            let ws_write_join_handle = Arc::clone(&self)
+                .ws_write(ws_write, msg_stream_receiver)
+                .await;
+            // Spawn keep-alive task if enabled
+            let _ = self.keepalive(msg_stream_sender.clone()).await;
+            let ws_read_handle = Arc::clone(&self).ws_read(ws_read, msg_stream_sender).await;
+            (ws_write_join_handle, ws_read_handle)
+        };
+
+        if let Ok(exit_normally) = ws_read_handle.await {
+            exit_normally?;
         }
-        // Handle incoming messages
-        let mut error = None;
-        while let Some(msg) = ws_read.next().await {
-            match msg {
-                Ok(Message::Text(text)) => {
-                    let tx_clone = stream_tx.clone();
-                    if let Err(e) = self.handle_message(&text, tx_clone).await {
-                        error!("Error handling message: {}", e);
-                    }
-                }
-                Ok(Message::Close(_)) => {
-                    warn!("WebSocket connection closed");
-                    break;
-                }
-                Err(e) => {
-                    error!("WebSocket error: {}", e);
-                    error.replace(e);
-                    break;
-                }
-                _ => {}
-            }
+        if let Ok(exit_normally) = ws_write_join_handle.await {
+            exit_normally?;
         }
-        write_task.abort();
         self.connected.store(false, Ordering::SeqCst);
         self.registered.store(false, Ordering::SeqCst);
-        if let Some(e) = error {
-            Err(e.into())
-        } else {
+        Ok(())
+    }
+
+    async fn ws_write<Sink>(
+        self: Arc<Self>,
+        mut ws_write: Sink,
+        mut msg_stream_receiver: Receiver<String>,
+    ) -> JoinHandle<crate::Result<()>>
+    where
+        Sink: SinkExt<Message> + Unpin + Send + Sync + 'static,
+        <Sink as futures_util::Sink<Message>>::Error: Display + Into<anyhow::Error> + Send + Sync,
+    {
+        tokio::spawn(async move {
+            while let Some(ref msg) = msg_stream_receiver.recv().await {
+                match self.ws_write_with_retry(&mut ws_write, msg).await {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return Err(anyhow!(err));
+                    }
+                }
+            }
             Ok(())
+        })
+    }
+    async fn ws_write_with_retry<W>(&self, ws_write: &mut W, msg: &str) -> crate::Result<()>
+    where
+        W: SinkExt<Message> + Unpin,
+        <W as futures_util::Sink<Message>>::Error: Display + Into<anyhow::Error>,
+    {
+        const TRY_INTERVAL: Duration = Duration::from_secs(1);
+        const TRY_MAX: u8 = 8;
+
+        let mut cnt = 1;
+        loop {
+            match ws_write.send(Message::Text(msg.into())).await {
+                Ok(_) => {
+                    info!("Success to send message to WebSocket, {msg}");
+                    return Ok(());
+                }
+                Err(err) => {
+                    if {
+                        cnt += 1;
+                        cnt
+                    } > TRY_MAX
+                    {
+                        warn!("Failed to send message to WebSocket, retrying in 1 second, err: {}, msg: {}", err, msg);
+                        tokio::time::sleep(TRY_INTERVAL).await;
+                        continue;
+                    }
+                    error!(
+                        "Failed to send message to WebSocket, after {} retries, err: {}, msg: {}",
+                        err, cnt, msg
+                    );
+                    return Err(anyhow!(err));
+                }
+            }
         }
+    }
+
+    async fn ws_read<R, E>(
+        self: Arc<Self>,
+        mut ws_read: R,
+        msg_stream_sender: mpsc::Sender<String>,
+    ) -> JoinHandle<crate::Result<()>>
+    where
+        E: Display + Into<anyhow::Error> + Send + Sync,
+        R: Stream<Item = Result<Message, E>> + Unpin + Send + Sync + 'static,
+    {
+        tokio::spawn(async move {
+            while let Some(msg) = ws_read.next().await {
+                match msg {
+                    Ok(Message::Text(text)) => {
+                        if let Err(e) = self.handle_message(&text, msg_stream_sender.clone()).await
+                        {
+                            error!("Error handling message: {}", e);
+                        }
+                    }
+                    Ok(Message::Close(_)) => {
+                        warn!("WebSocket connection closed");
+                        return Ok(());
+                    }
+                    Err(err) => {
+                        error!("WebSocket error: {}", err);
+                        return Err(anyhow!(err));
+                    }
+                    _ => continue,
+                }
+            }
+            unreachable!()
+        })
+    }
+
+    async fn keepalive(&self, msg_stream_sender: mpsc::Sender<String>) -> JoinHandle<()> {
+        let keep_alive_interval = self.config.keep_alive_interval;
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(keep_alive_interval).await;
+                const PING: &str = r#"{"code": 200,"message": "ping"}"#;
+                match msg_stream_sender.send(PING.into()).await {
+                    Ok(_) => {
+                        continue;
+                    }
+                    Err(err) => {
+                        warn!("stream_tx dropped error, keepalive task stopping. err: {err}");
+                        return;
+                    }
+                }
+            }
+        })
     }
 
     /// Open connection to DingTalk
