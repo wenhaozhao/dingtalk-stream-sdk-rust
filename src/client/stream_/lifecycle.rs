@@ -111,12 +111,12 @@ impl DingTalkStream {
     {
         const TRY_INTERVAL: Duration = Duration::from_secs(1);
         const TRY_MAX: u8 = 8;
-
+        info!("Sending message to WebSocket, msg: {}", msg);
         let mut cnt = 1;
         loop {
             match ws_write.send(Message::Text(msg.into())).await {
                 Ok(_) => {
-                    info!("Success to send message to WebSocket, {msg}");
+                    info!("Success to send message to WebSocket, {}", msg);
                     return Ok(());
                 }
                 Err(err) => {
@@ -152,13 +152,14 @@ impl DingTalkStream {
             while let Some(msg) = ws_read.next().await {
                 match msg {
                     Ok(Message::Text(text)) => {
+                        info!("Received text message: {}", text);
                         if let Err(e) = self.handle_message(&text, msg_stream_sender.clone()).await
                         {
                             error!("Error handling message: {}", e);
                         }
                     }
                     Ok(Message::Close(_)) => {
-                        warn!("WebSocket connection closed");
+                        warn!("Received close message: WebSocket connection will be closed!!!");
                         return Ok(());
                     }
                     Err(err) => {
