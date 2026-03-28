@@ -1,8 +1,6 @@
 use crate::client::AccessTokenCache;
-use crate::frames::RobotMessage;
 use crate::{CallbackHandler, ClientConfig, Credential, EventHandler, MessageTopic, SystemHandler};
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -56,17 +54,6 @@ impl DingTalkStream {
             access_token: Default::default(),
             http_client: reqwest::Client::default(),
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct DingtalkMessageSender(pub(super) tokio::sync::mpsc::Sender<RobotMessage>);
-
-impl Deref for DingtalkMessageSender {
-    type Target = tokio::sync::mpsc::Sender<RobotMessage>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
