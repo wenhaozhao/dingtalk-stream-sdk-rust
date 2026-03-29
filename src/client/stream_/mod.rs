@@ -1,5 +1,7 @@
 use crate::client::AccessTokenCache;
-use crate::handlers::{CallbackHandler, EventHandler, SystemHandler};
+use crate::handlers::{
+    CallbackHandler, DefaultLifecycleListener, EventHandler, LifecycleListener, SystemHandler,
+};
 use crate::{ClientConfig, Credential};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,6 +37,7 @@ pub struct DingTalkStream {
     /// Access token cache
     access_token: Arc<RwLock<Option<AccessTokenCache>>>,
     http_client: reqwest::Client,
+    lifecycle_listener: Box<dyn LifecycleListener>,
 }
 
 impl DingTalkStream {
@@ -55,6 +58,7 @@ impl DingTalkStream {
             registered: AtomicBool::new(false),
             access_token: Default::default(),
             http_client: reqwest::Client::default(),
+            lifecycle_listener: Box::new(DefaultLifecycleListener::default()),
         }
     }
 }
@@ -79,6 +83,14 @@ impl DingTalkStream {
         handler: H,
     ) -> &mut Self {
         self.system_handler.replace(Box::new(handler));
+        self
+    }
+
+    pub async fn register_lifecycle_notify<N: LifecycleListener + 'static>(
+        mut self,
+        notify: N,
+    ) -> Self {
+        self.lifecycle_listener = Box::new(notify);
         self
     }
 }

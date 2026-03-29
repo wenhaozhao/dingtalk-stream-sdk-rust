@@ -3,14 +3,15 @@
 //! Provides trait-based handlers for different message types
 
 use crate::frames::down_message::callback_message::CallbackMessage;
+use crate::frames::down_message::event_message::EventMessage;
+use crate::frames::down_message::system_message::SystemMessage;
+use crate::frames::down_message::MessageTopic;
 use crate::frames::up_message::callback_message::WebhookMessage;
 use crate::DingTalkStream;
 use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
 use tokio::sync::mpsc::Sender;
-use crate::frames::down_message::event_message::EventMessage;
-use crate::frames::down_message::MessageTopic;
-use crate::frames::down_message::system_message::SystemMessage;
+use tokio_tungstenite::tungstenite::Message;
 
 /// Callback handler trait for handling callback messages
 #[async_trait]
@@ -112,3 +113,117 @@ impl DefaultCallbackHandler {
         }
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub enum LifecycleEvent<'a> {
+    Start,
+    Connecting {
+        websocket_url: &'a str,
+    },
+    Connected {
+        websocket_url: &'a str,
+    },
+    WebsocketWrite {
+        payload: &'a str,
+        result: &'a crate::Result<()>,
+    },
+    WebsocketWriteWithRetry {
+        payload: &'a str,
+        cnt: u8,
+        result: &'a crate::Result<()>,
+    },
+    WebsocketRead {
+        result: &'a crate::Result<Message>,
+    },
+    Keepalive {
+        payload: &'a str,
+        result: &'a crate::Result<()>,
+    },
+    Disconnected {
+        result: &'a crate::Result<()>,
+    },
+    Stopped,
+}
+#[allow(unused)]
+#[async_trait]
+pub trait LifecycleListener: Send + Sync {
+    async fn on_event<'a>(&self, client: &DingTalkStream, event: LifecycleEvent<'a>) {}
+
+    async fn on_start(&self, client: &DingTalkStream) {
+        let _ = self.on_event(client, LifecycleEvent::Start).await;
+    }
+
+    async fn on_connecting(&self, client: &DingTalkStream, websocket_url: &str) {
+        let _ = self
+            .on_event(client, LifecycleEvent::Connecting { websocket_url })
+            .await;
+    }
+
+    async fn on_connected(&self, client: &DingTalkStream, websocket_url: &str) {
+        let _ = self
+            .on_event(client, LifecycleEvent::Connected { websocket_url })
+            .await;
+    }
+
+    async fn on_websocket_write(
+        &self,
+        client: &DingTalkStream,
+        payload: &str,
+        result: &crate::Result<()>,
+    ) {
+        let _ = self
+            .on_event(client, LifecycleEvent::WebsocketWrite { payload, result })
+            .await;
+    }
+
+    async fn on_websocket_write_with_retry(
+        &self,
+        client: &DingTalkStream,
+        payload: &str,
+        cnt: u8,
+        result: &crate::Result<()>,
+    ) {
+        let _ = self
+            .on_event(
+                client,
+                LifecycleEvent::WebsocketWriteWithRetry {
+                    payload,
+                    cnt,
+                    result,
+                },
+            )
+            .await;
+    }
+
+    async fn on_websocket_read(&self, client: &DingTalkStream, result: &crate::Result<Message>) {
+        let _ = self
+            .on_event(client, LifecycleEvent::WebsocketRead { result })
+            .await;
+    }
+
+    async fn on_keepalive(
+        &self,
+        client: &DingTalkStream,
+        payload: &str,
+        result: &crate::Result<()>,
+    ) {
+        let _ = self
+            .on_event(client, LifecycleEvent::Keepalive { payload, result })
+            .await;
+    }
+
+    async fn on_disconnected(&self, client: &DingTalkStream, result: &crate::Result<()>) {
+        let _ = self
+            .on_event(client, LifecycleEvent::Disconnected { result })
+            .await;
+    }
+
+    async fn on_stopped(&self, client: &DingTalkStream) {
+        let _ = self.on_event(client, LifecycleEvent::Stopped).await;
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct DefaultLifecycleListener;
+
+impl LifecycleListener for DefaultLifecycleListener {}
