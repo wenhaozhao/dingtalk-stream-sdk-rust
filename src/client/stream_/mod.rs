@@ -65,13 +65,16 @@ impl DingTalkStream {
 
 impl DingTalkStream {
     /// Register an event handler
-    pub fn register_event_handler<H: EventHandler + 'static>(mut self, handler: Arc<H>) -> Self {
+    pub async fn register_event_handler<H: EventHandler + 'static>(
+        mut self,
+        handler: Arc<H>,
+    ) -> Self {
         self.event_handler.replace(handler);
         self
     }
 
     /// Register a callback handler for a specific topic
-    pub fn register_callback_handler<H: CallbackHandler + 'static>(
+    pub async fn register_callback_handler<H: CallbackHandler + 'static>(
         mut self,
         handler: Arc<H>,
     ) -> Self {

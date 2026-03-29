@@ -9,9 +9,7 @@ use dingtalk_stream::frames::down_message::callback_message::{
 };
 use dingtalk_stream::frames::down_message::MessageTopic;
 use dingtalk_stream::frames::up_message::callback_message::WebhookMessage;
-use dingtalk_stream::frames::up_message::robot_message::{
-    RobotMessage, RobotPrivateMessage,
-};
+use dingtalk_stream::frames::up_message::robot_message::{RobotMessage, RobotPrivateMessage};
 use dingtalk_stream::frames::up_message::MessageContent;
 use dingtalk_stream::handlers::{CallbackHandler, Error, ErrorCode, Resp};
 use dingtalk_stream::{Credential, DingTalkStream, TOPIC_ROBOT};
@@ -133,9 +131,13 @@ async fn main() {
     let credential = Credential::new(client_id, client_secret);
 
     // Create client with debug mode
-    let (dingtalk_stream, _) = Arc::new(DingTalkStream::new(credential).register_callback_handler(
-        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())).into(),
-    ))
+    let (dingtalk_stream, _) = Arc::new(
+        DingTalkStream::new(credential)
+            .register_callback_handler(
+                RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())).into(),
+            )
+            .await,
+    )
     .start()
     .await
     .unwrap();
