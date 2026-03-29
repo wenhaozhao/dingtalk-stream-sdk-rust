@@ -65,10 +65,7 @@ impl DingTalkStream {
 
 impl DingTalkStream {
     /// Register an event handler
-    pub fn register_event_handler<H: EventHandler + 'static>(
-        &mut self,
-        handler: Arc<H>,
-    ) -> &mut Self {
+    pub fn register_event_handler<H: EventHandler + 'static>(mut self, handler: Arc<H>) -> Self {
         self.event_handler.replace(handler);
         self
     }
@@ -85,17 +82,17 @@ impl DingTalkStream {
 
     /// Register a system handler
     pub async fn register_system_handler<H: SystemHandler + 'static>(
-        &mut self,
+        mut self,
         handler: Arc<H>,
-    ) -> &mut Self {
+    ) -> Self {
         self.system_handler.replace(handler);
         self
     }
 
     pub async fn register_lifecycle_listener<L: LifecycleListener + 'static>(
-        &mut self,
+        mut self,
         listener: Arc<L>,
-    ) -> &mut Self {
+    ) -> Self {
         self.lifecycle_listener = listener;
         self
     }
