@@ -93,9 +93,9 @@ impl DingTalkStream {
     }
 
     pub async fn register_lifecycle_listener<L: LifecycleListener + 'static>(
-        mut self,
+        &mut self,
         listener: Arc<L>,
-    ) -> Self {
+    ) -> &mut Self {
         self.lifecycle_listener = listener;
         self
     }
