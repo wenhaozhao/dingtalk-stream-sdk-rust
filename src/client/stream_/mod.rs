@@ -25,11 +25,11 @@ pub struct DingTalkStream {
     /// Client configuration
     config: ClientConfig,
     /// Event handler
-    event_handler: Option<Box<dyn EventHandler>>,
+    event_handler: Option<Arc<dyn EventHandler>>,
     /// Callback handlers mapped by topic
-    callback_handlers: HashMap<MessageTopic, Box<dyn CallbackHandler>>,
+    callback_handlers: HashMap<MessageTopic, Arc<dyn CallbackHandler>>,
     /// System handler
-    system_handler: Option<Box<dyn SystemHandler>>,
+    system_handler: Option<Arc<dyn SystemHandler>>,
     /// Whether connected
     connected: AtomicBool,
     /// Whether registered
@@ -37,7 +37,7 @@ pub struct DingTalkStream {
     /// Access token cache
     access_token: Arc<RwLock<Option<AccessTokenCache>>>,
     http_client: reqwest::Client,
-    lifecycle_listener: Box<dyn LifecycleListener>,
+    lifecycle_listener: Arc<dyn LifecycleListener>,
 }
 
 impl DingTalkStream {
@@ -58,39 +58,45 @@ impl DingTalkStream {
             registered: AtomicBool::new(false),
             access_token: Default::default(),
             http_client: reqwest::Client::default(),
-            lifecycle_listener: Box::new(DefaultLifecycleListener::default()),
+            lifecycle_listener: Arc::new(DefaultLifecycleListener::default()),
         }
     }
 }
 
 impl DingTalkStream {
     /// Register an event handler
-    pub fn register_event_handler<H: EventHandler + 'static>(&mut self, handler: H) -> &mut Self {
-        self.event_handler.replace(Box::new(handler));
+    pub fn register_event_handler<H: EventHandler + 'static>(
+        &mut self,
+        handler: Arc<H>,
+    ) -> &mut Self {
+        self.event_handler.replace(handler);
         self
     }
 
     /// Register a callback handler for a specific topic
-    pub fn register_callback_handler<H: CallbackHandler + 'static>(mut self, handler: H) -> Self {
+    pub fn register_callback_handler<H: CallbackHandler + 'static>(
+        mut self,
+        handler: Arc<H>,
+    ) -> Self {
         let topic = handler.topic().clone();
-        self.callback_handlers.insert(topic, Box::new(handler));
+        self.callback_handlers.insert(topic, handler);
         self
     }
 
     /// Register a system handler
     pub async fn register_system_handler<H: SystemHandler + 'static>(
         &mut self,
-        handler: H,
+        handler: Arc<H>,
     ) -> &mut Self {
-        self.system_handler.replace(Box::new(handler));
+        self.system_handler.replace(handler);
         self
     }
 
-    pub async fn register_lifecycle_listener<N: LifecycleListener + 'static>(
+    pub async fn register_lifecycle_listener<L: LifecycleListener + 'static>(
         mut self,
-        notify: N,
+        listener: Arc<L>,
     ) -> Self {
-        self.lifecycle_listener = Box::new(notify);
+        self.lifecycle_listener = listener;
         self
     }
 }

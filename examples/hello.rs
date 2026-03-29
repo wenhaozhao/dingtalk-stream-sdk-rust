@@ -134,7 +134,7 @@ async fn main() {
 
     // Create client with debug mode
     let (dingtalk_stream, _) = Arc::new(DingTalkStream::new(credential).register_callback_handler(
-        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())),
+        RobotMessageHandler(MessageTopic::Callback(TOPIC_ROBOT.to_string())).into(),
     ))
     .start()
     .await
