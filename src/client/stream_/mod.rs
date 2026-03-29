@@ -86,7 +86,7 @@ impl DingTalkStream {
         self
     }
 
-    pub async fn register_lifecycle_notify<N: LifecycleListener + 'static>(
+    pub async fn register_lifecycle_listener<N: LifecycleListener + 'static>(
         mut self,
         notify: N,
     ) -> Self {
