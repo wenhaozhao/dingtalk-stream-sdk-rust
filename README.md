@@ -1,160 +1,159 @@
 # DingTalk Stream SDK for Rust
 
-钉钉流式 SDK 的 Rust 实现，基于 Node.js 和 Python 版本的官方 SDK。
+钉钉 Stream SDK 的 Rust 实现，参考了官方 Node.js / Python SDK 的能力模型。
 
 ## 功能特性
 
-- WebSocket 长连接管理
-- 自动重连
-- 事件和回调消息处理
-- 消息 ACK 确认
-- 机器人消息处理
-- AI Graph API 支持
-- 卡片回调处理
-- Access Token 管理
+- WebSocket 长连接与自动重连
+- `CALLBACK` / `EVENT` / `SYSTEM` 三类消息处理
+- 自动 ACK 回执
+- 回调会话 `sessionWebhook` 异步回复能力
+- 机器人主动发消息（私聊 / 群聊）
+- 文件与图片下载、媒体上传
+- Access Token 自动缓存与续期
+- 生命周期事件监听（连接、收发、心跳、断开）
 
 ## 安装
 
 ```toml
-# Cargo.toml
 [dependencies]
 dingtalk-stream-sdk = "0.1"
 ```
 
-## 快速开始
+如需使用系统根证书池，可显式启用：
 
-```rust
-use dingtalk_stream::{
-    Credential, DingTalkStream, CallbackHandler, CallbackMessage,
-    TOPIC_ROBOT,
-};
-use async_trait::async_trait;
-use std::env;
-
-/// 自定义机器人消息处理器
-struct RobotHandler;
-
-#[async_trait]
-impl CallbackHandler for RobotHandler {
-    async fn process(&self, message: &CallbackMessage) -> (i32, String) {
-        // 从消息中提取文本
-        if let Some(data) = &message.data {
-            if let Some(text_obj) = data.get("text") {
-                if let Some(content) = text_obj.get("content").and_then(|v| v.as_str()) {
-                    println!("收到消息: {}", content);
-                    return (200, format!("回复: {}", content));
-                }
-            }
-        }
-        (404, "not implement".to_string())
-    }
-
-    fn topic(&self) -> &str {
-        TOPIC_ROBOT
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    // 初始化日志
-    tracing_subscriber::fmt::init();
-
-    // 从环境变量获取凭证
-    let client_id = env::var("DINGTALK_CLIENT_ID").expect("请设置 DINGTALK_CLIENT_ID");
-    let client_secret = env::var("DINGTALK_CLIENT_SECRET").expect("请设置 DINGTALK_CLIENT_SECRET");
-
-    // 创建凭证
-    let credential = Credential::new(client_id, client_secret);
-
-    // 创建客户端（开启调试模式）
-    let client = DingTalkStream::new(credential).with_debug(true);
-
-    // 注册机器人消息处理器
-    client.register_callback_handler(TOPIC_ROBOT, RobotHandler);
-
-    // 启动客户端（会自动重连）
-    client.start_forever().await;
-}
+```toml
+[dependencies]
+dingtalk-stream-sdk = { version = "0.1", features = ["rustls-tls-native-roots"] }
 ```
 
 ## 环境变量
 
-- `DINGTALK_CLIENT_ID`: 钉钉应用 Client ID
-- `DINGTALK_CLIENT_SECRET`: 钉钉应用 Client Secret
+- `DINGTALK_CLIENT_ID`
+- `DINGTALK_CLIENT_SECRET`
 
-## 配置选项
+## 快速开始
 
 ```rust
-use dingtalk_stream::{Credential, ClientConfig, DingTalkStream};
+use async_trait::async_trait;
+use dingtalk_stream::frames::down_message::callback_message::{CallbackMessage, MessagePayload};
+use dingtalk_stream::frames::down_message::MessageTopic;
+use dingtalk_stream::frames::up_message::callback_message::WebhookMessage;
+use dingtalk_stream::handlers::{CallbackHandler, Error, ErrorCode, Resp};
+use dingtalk_stream::{Credential, DingTalkStream, TOPIC_ROBOT};
+use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
+
+struct RobotHandler(MessageTopic);
+
+#[async_trait]
+impl CallbackHandler for RobotHandler {
+    async fn process(
+        &self,
+        _client: &DingTalkStream,
+        message: &CallbackMessage,
+        _cb_webhook_msg_sender: Option<Sender<WebhookMessage>>,
+    ) -> Result<Resp, Error> {
+        if let Some(data) = &message.data {
+            if let Some(MessagePayload::Text { text }) = &data.payload {
+                return Ok(Resp::Text(format!("echo: {}", text.content)));
+            }
+        }
+        Err(Error {
+            msg: "unsupported message".to_string(),
+            code: ErrorCode::BadRequest,
+        })
+    }
+
+    fn topic(&self) -> &MessageTopic {
+        &self.0
+    }
+}
+
+#[tokio::main]
+async fn main() -> dingtalk_stream::Result<()> {
+    tracing_subscriber::fmt::init();
+
+    let client = Arc::new(
+        DingTalkStream::new(Credential::from_env())
+            .register_callback_handler(Arc::new(RobotHandler(MessageTopic::Callback(
+                TOPIC_ROBOT.to_string(),
+            ))))
+            .await,
+    );
+
+    let (_client, join_handle) = client.start().await?;
+    join_handle.await??;
+    Ok(())
+}
+```
+
+完整示例见 `examples/hello.rs`。
+
+## ClientConfig
+
+```rust
+use dingtalk_stream::ClientConfig;
+use std::time::Duration;
 
 let config = ClientConfig {
-    auto_reconnect: true,      // 自动重连
-    keep_alive: true,          // 保持连接
-    debug: true,               // 调试模式
-    reconnect_interval: 10,    // 重连间隔（秒）
-    keep_alive_interval: 60,   // 心跳间隔（秒）
-    ..Default::default()
+    auto_reconnect: true,
+    ua: "my-bot/1.0".to_string(),
+    reconnect_interval: Duration::from_secs(10),
+    keep_alive_interval: Duration::from_secs(60),
 };
-
-let client = DingTalkStream::with_config(credential, config);
 ```
 
-## 消息类型
+## 主题常量
 
-### 回调消息 (CALLBACK)
+- `TOPIC_ROBOT`: `/v1.0/im/bot/messages/get`
+- `TOPIC_ROBOT_DELEGATE`: `/v1.0/im/bot/messages/delegate`
+- `TOPIC_CARD`: `/v1.0/card/instances/callback`
 
-- 机器人消息: `/v1.0/im/bot/messages/get`
-- 卡片回调: `/v1.0/card/instances/callback`
-- AI Graph API: `/v1.0/graph/api/invoke`
-
-### 事件消息 (EVENT)
-
-- 默认订阅: `*` (所有事件)
-
-### 系统消息 (SYSTEM)
-
-- CONNECTED: 连接建立
-- REGISTERED: 注册成功
-- disconnect: 断开连接
-- KEEPALIVE: 心跳
-- ping: ping 请求
-
-## 发送消息响应
+## 主动发机器人消息
 
 ```rust
-// 发送回调响应（避免服务端重试）
-client.socket_callback_response(&message_id, result).await;
+use dingtalk_stream::frames::up_message::robot_message::{RobotMessage, RobotPrivateMessage};
 
-// 发送 Graph API 响应
-client.send_graph_api_response(&message_id, response).await;
+client
+    .send_message(
+        RobotMessage::from(RobotPrivateMessage {
+            user_ids: vec!["manager_userid".into()],
+            content: "hello".into(),
+        })
+        .with_cb(|result| {
+            println!("send result: {result:?}");
+        }),
+    )
+    .await?;
 ```
 
-## 获取 Access Token
+## 下载回调中的文件/图片
+
+`PayloadPicture` 和 `PayloadFile` 实现了 `DingtalkResource`，可在回调中直接下载：
 
 ```rust
-let token = client.get_access_token().await?;
+use dingtalk_stream::client::DingtalkResource;
+
+let (path, _bytes_or_image) = picture_payload.fetch(client, "/tmp".into()).await?;
+println!("saved to: {}", path.display());
 ```
 
-## 示例
+## 上传媒体
 
-查看 `examples/hello.rs` 获取完整示例。
+```rust
+use dingtalk_stream::client::{DingTalkMedia, MediaImage};
+use std::path::PathBuf;
 
-## 依赖
+let media = MediaImage::from(PathBuf::from("./test_resources/img.png"));
+let result = media.upload(client).await?;
+println!("upload: errcode={}, errmsg={}", result.errcode, result.errmsg);
+```
 
-- tokio (full)
-- tokio-tungstenite
-- reqwest
-- serde / serde_json
-- futures-util
-- parking_lot
-- async-trait
-- tracing
+## 生命周期监听
 
-## 参考
-
-- [钉钉开放平台文档](https://open.dingtalk.com/document/dingstart/start-overview)
-- [Node.js SDK](https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs)
-- [Python SDK](https://github.com/open-dingtalk/dingtalk-stream-sdk-python)
+可实现 `LifecycleListener` 监听 `Start`、`Connected`、`WebsocketRead`、`Disconnected` 等事件，
+并通过 `register_lifecycle_listener` 注入。
 
 ## License
 
