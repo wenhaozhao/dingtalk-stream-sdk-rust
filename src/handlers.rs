@@ -10,6 +10,7 @@ use crate::frames::up_message::callback_message::WebhookMessage;
 use crate::DingTalkStream;
 use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -19,7 +20,7 @@ pub trait CallbackHandler: Send + Sync {
     /// Process a callback message
     async fn process(
         &self,
-        client: &DingTalkStream,
+        client: Arc<DingTalkStream>,
         message: &CallbackMessage,
         cb_webhook_msg_sender: Option<Sender<WebhookMessage>>,
     ) -> Result<Resp, Error>;
@@ -35,7 +36,11 @@ pub trait CallbackHandler: Send + Sync {
 #[async_trait]
 pub trait EventHandler: Send + Sync {
     /// Process an event message
-    async fn process(&self, message: &EventMessage) -> Result<Resp, Error>;
+    async fn process(
+        &self,
+        client: Arc<DingTalkStream>,
+        message: &EventMessage,
+    ) -> Result<Resp, Error>;
 
     /// Pre-start hook
     fn pre_start(&self) {}
@@ -45,7 +50,11 @@ pub trait EventHandler: Send + Sync {
 #[async_trait]
 pub trait SystemHandler: Send + Sync {
     /// Process a system message
-    async fn process(&self, message: &SystemMessage) -> Result<Resp, Error>;
+    async fn process(
+        &self,
+        client: Arc<DingTalkStream>,
+        message: &SystemMessage,
+    ) -> Result<Resp, Error>;
 
     /// Pre-start hook
     fn pre_start(&self) {}
@@ -147,19 +156,19 @@ pub enum LifecycleEvent<'a> {
 #[allow(unused)]
 #[async_trait]
 pub trait LifecycleListener: Send + Sync {
-    async fn on_event<'a>(&self, client: &DingTalkStream, event: LifecycleEvent<'a>) {}
+    async fn on_event<'a>(&self, client: Arc<DingTalkStream>, event: LifecycleEvent<'a>) {}
 
-    async fn on_start(&self, client: &DingTalkStream) {
+    async fn on_start(&self, client: Arc<DingTalkStream>) {
         let _ = self.on_event(client, LifecycleEvent::Start).await;
     }
 
-    async fn on_connecting(&self, client: &DingTalkStream, websocket_url: &str) {
+    async fn on_connecting(&self, client: Arc<DingTalkStream>, websocket_url: &str) {
         let _ = self
             .on_event(client, LifecycleEvent::Connecting { websocket_url })
             .await;
     }
 
-    async fn on_connected(&self, client: &DingTalkStream, websocket_url: &str) {
+    async fn on_connected(&self, client: Arc<DingTalkStream>, websocket_url: &str) {
         let _ = self
             .on_event(client, LifecycleEvent::Connected { websocket_url })
             .await;
@@ -167,7 +176,7 @@ pub trait LifecycleListener: Send + Sync {
 
     async fn on_websocket_write(
         &self,
-        client: &DingTalkStream,
+        client: Arc<DingTalkStream>,
         payload: &str,
         result: &crate::Result<()>,
     ) {
@@ -178,7 +187,7 @@ pub trait LifecycleListener: Send + Sync {
 
     async fn on_websocket_write_with_retry(
         &self,
-        client: &DingTalkStream,
+        client: Arc<DingTalkStream>,
         payload: &str,
         cnt: u8,
         result: &crate::Result<()>,
@@ -195,7 +204,11 @@ pub trait LifecycleListener: Send + Sync {
             .await;
     }
 
-    async fn on_websocket_read(&self, client: &DingTalkStream, result: &crate::Result<Message>) {
+    async fn on_websocket_read(
+        &self,
+        client: Arc<DingTalkStream>,
+        result: &crate::Result<Message>,
+    ) {
         let _ = self
             .on_event(client, LifecycleEvent::WebsocketRead { result })
             .await;
@@ -203,7 +216,7 @@ pub trait LifecycleListener: Send + Sync {
 
     async fn on_keepalive(
         &self,
-        client: &DingTalkStream,
+        client: Arc<DingTalkStream>,
         payload: &str,
         result: &crate::Result<()>,
     ) {
@@ -212,13 +225,13 @@ pub trait LifecycleListener: Send + Sync {
             .await;
     }
 
-    async fn on_disconnected(&self, client: &DingTalkStream, result: &crate::Result<()>) {
+    async fn on_disconnected(&self, client: Arc<DingTalkStream>, result: &crate::Result<()>) {
         let _ = self
             .on_event(client, LifecycleEvent::Disconnected { result })
             .await;
     }
 
-    async fn on_stopped(&self, client: &DingTalkStream) {
+    async fn on_stopped(&self, client: Arc<DingTalkStream>) {
         let _ = self.on_event(client, LifecycleEvent::Stopped).await;
     }
 }

@@ -6,19 +6,20 @@ use crate::frames::{
     },
     AckMessage,
 };
+use std::sync::Arc;
 
+use crate::frames::down_message::callback_message::{CallbackMessage, MessageData};
+use crate::frames::up_message::callback_message::WebhookMessage;
 use anyhow::anyhow;
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, error, info, warn};
-use crate::frames::down_message::callback_message::{CallbackMessage, MessageData};
-use crate::frames::up_message::callback_message::WebhookMessage;
 
 impl DingTalkStream {
     /// Handle incoming message
     pub(super) async fn handle_message(
-        &self,
+        self: Arc<Self>,
         text: &str,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {
@@ -59,7 +60,7 @@ impl DingTalkStream {
 impl DingTalkStream {
     /// Handle system message
     async fn handle_system(
-        &self,
+        self: Arc<Self>,
         msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {
@@ -97,14 +98,14 @@ impl DingTalkStream {
                 warn!("Failed to parse system message, skipping processing");
                 return Ok(());
             };
-            let _ = handler.process(&sys_msg).await;
+            let _ = handler.process(Arc::clone(&self), &sys_msg).await;
         }
         Ok(())
     }
 
     /// Handle event message
     async fn handle_event(
-        &self,
+        self: Arc<Self>,
         msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {
@@ -114,7 +115,7 @@ impl DingTalkStream {
                 warn!("Failed to parse event message, skipping processing");
                 return Ok(());
             };
-            let (code, response_msg) = match handler.process(&event_msg).await {
+            let (code, response_msg) = match handler.process(Arc::clone(&self), &event_msg).await {
                 Ok(result) => (200, result.to_string()),
                 Err(err) => (err.code as i32, err.msg),
             };
@@ -129,7 +130,7 @@ impl DingTalkStream {
 
     /// Handle callback message
     async fn handle_callback(
-        &self,
+        self: Arc<Self>,
         msg: DownStreamMessage,
         tx: mpsc::Sender<String>,
     ) -> crate::Result<()> {
@@ -161,7 +162,7 @@ impl DingTalkStream {
             warn!("No handler registered for topic: {}", topic);
             return Ok(());
         };
-        let (code, response_msg) = match handler.process(&self, &cb_msg, sender).await {
+        let (code, response_msg) = match handler.process(Arc::clone(&self), &cb_msg, sender).await {
             Ok(result) => (200, result.to_string()),
             Err(err) => (err.code as i32, err.msg),
         };

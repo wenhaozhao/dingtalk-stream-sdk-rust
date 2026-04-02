@@ -24,17 +24,17 @@ impl DingTalkStream {
         info!("Starting DingTalk Stream client...");
         let self_ = Arc::clone(&self);
         let join_handle = tokio::spawn(async move {
-            let _ = self_.lifecycle_listener.on_start(&self_).await;
+            let _ = self_.lifecycle_listener.on_start(Arc::clone(&self_)).await;
             loop {
                 let result = Arc::clone(&self_).connect().await;
                 let _ = self_
                     .lifecycle_listener
-                    .on_disconnected(&self_, &result)
+                    .on_disconnected(Arc::clone(&self_), &result)
                     .await;
                 match result {
                     Ok(_) => {
                         info!("Connection closed normally");
-                        let _ = self_.lifecycle_listener.on_stopped(&self_);
+                        let _ = self_.lifecycle_listener.on_stopped(Arc::clone(&self_));
                         return Ok(());
                     }
                     Err(e) => {
@@ -46,7 +46,7 @@ impl DingTalkStream {
                             );
                             sleep(self_.config.reconnect_interval).await;
                         } else {
-                            let _ = self_.lifecycle_listener.on_stopped(&self_);
+                            let _ = self_.lifecycle_listener.on_stopped(Arc::clone(&self_));
                             return Err(anyhow!(e));
                         }
                     }
@@ -63,13 +63,19 @@ impl DingTalkStream {
         let connection = self.open_connection().await.map_err(|err| anyhow!(err))?;
         let ws_url = format!("{}?ticket={}", connection.endpoint, connection.ticket);
         info!("Connecting to WebSocket: {}", ws_url);
-        let _ = self.lifecycle_listener.on_connecting(&self, &ws_url).await;
+        let _ = self
+            .lifecycle_listener
+            .on_connecting(Arc::clone(&self), &ws_url)
+            .await;
         // Connect to WebSocket
         let (ws_stream, _) = connect_async(&ws_url).await?;
         let (ws_write, ws_read) = ws_stream.split();
         self.connected.store(true, Ordering::SeqCst);
         info!("Connected to DingTalk WebSocket {}", ws_url);
-        let _ = self.lifecycle_listener.on_connected(&self, &ws_url).await;
+        let _ = self
+            .lifecycle_listener
+            .on_connected(Arc::clone(&self), &ws_url)
+            .await;
         let (ws_write_join_handle, ws_read_handle) = {
             // Create channel for sending messages
             let (msg_stream_sender, msg_stream_receiver) = mpsc::channel::<String>(256);
@@ -104,10 +110,12 @@ impl DingTalkStream {
     {
         tokio::spawn(async move {
             while let Some(ref msg) = msg_stream_receiver.recv().await {
-                let result = self.ws_write_with_retry(&mut ws_write, msg).await;
+                let result = Arc::clone(&self)
+                    .ws_write_with_retry(&mut ws_write, msg)
+                    .await;
                 let _ = self
                     .lifecycle_listener
-                    .on_websocket_write(&self, msg, &result)
+                    .on_websocket_write(Arc::clone(&self), msg, &result)
                     .await;
                 match result {
                     Ok(_) => {}
@@ -119,7 +127,11 @@ impl DingTalkStream {
             Ok(())
         })
     }
-    async fn ws_write_with_retry<W>(&self, ws_write: &mut W, msg: &str) -> crate::Result<()>
+    async fn ws_write_with_retry<W>(
+        self: Arc<Self>,
+        ws_write: &mut W,
+        msg: &str,
+    ) -> crate::Result<()>
     where
         W: SinkExt<Message> + Unpin,
         <W as futures_util::Sink<Message>>::Error: Display + Into<anyhow::Error>,
@@ -135,7 +147,7 @@ impl DingTalkStream {
                 .map_err(|err| anyhow!(err));
             let _ = self
                 .lifecycle_listener
-                .on_websocket_write_with_retry(self, msg, cnt, &result)
+                .on_websocket_write_with_retry(Arc::clone(&self), msg, cnt, &result)
                 .await;
             match result {
                 Ok(_) => {
@@ -176,12 +188,17 @@ impl DingTalkStream {
                 let result = result.map_err(|err| anyhow!(err));
                 let _ = self
                     .lifecycle_listener
-                    .on_websocket_read(&self, &result)
+                    .on_websocket_read(Arc::clone(&self), &result)
                     .await;
                 match result {
                     Ok(Message::Text(text)) => {
                         info!("Received text message: {}", text);
-                        if let Err(e) = self.handle_message(&text, msg_stream_sender.clone()).await
+                        if let Err(e) = Self::handle_message(
+                            Arc::clone(&self),
+                            &text,
+                            msg_stream_sender.clone(),
+                        )
+                        .await
                         {
                             error!("Error handling message: {}", e);
                         }
@@ -212,7 +229,7 @@ impl DingTalkStream {
                     .map_err(|err| anyhow!(err));
                 let _ = &self
                     .lifecycle_listener
-                    .on_keepalive(&self, PING, &result)
+                    .on_keepalive(Arc::clone(&self), PING, &result)
                     .await;
                 match result {
                     Ok(_) => {

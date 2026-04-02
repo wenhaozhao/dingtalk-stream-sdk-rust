@@ -28,7 +28,7 @@ const TMP_DIR: &str = "/var/tmp";
 impl CallbackHandler for RobotMessageHandler {
     async fn process(
         &self,
-        client: &DingTalkStream,
+        client: Arc<DingTalkStream>,
         message: &CallbackMessage,
         cb_webhook_msg_sender: Option<tokio::sync::mpsc::Sender<WebhookMessage>>,
     ) -> Result<Resp, Error> {
@@ -57,7 +57,7 @@ impl CallbackHandler for RobotMessageHandler {
                     return Ok(Resp::Text(format!("Echo: {}", text.content)));
                 }
                 Some(MessagePayload::Picture { content }) => {
-                    match content.fetch(client, TMP_DIR.into()).await {
+                    match content.fetch(&client, TMP_DIR.into()).await {
                         Ok((filepath, _)) => {
                             println!("Image fetched successfully: {}", filepath.display());
                         }
@@ -68,7 +68,7 @@ impl CallbackHandler for RobotMessageHandler {
                     return Ok(Resp::Text("Echo: unexpected".to_string()));
                 }
                 Some(MessagePayload::File { content }) => {
-                    match content.fetch(client, TMP_DIR.into()).await {
+                    match content.fetch(&client, TMP_DIR.into()).await {
                         Ok((filepath, _)) => {
                             println!("file fetched successfully: {}", filepath.display());
                         }
@@ -85,7 +85,7 @@ impl CallbackHandler for RobotMessageHandler {
                                 println!("{text}");
                             }
                             RichTextItem::Picture(content) => {
-                                match content.fetch(client, TMP_DIR.into()).await {
+                                match content.fetch(&client, TMP_DIR.into()).await {
                                     Ok((filepath, _)) => {
                                         println!("{}", filepath.display());
                                     }
