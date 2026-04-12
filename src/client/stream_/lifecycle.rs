@@ -14,7 +14,7 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{debug, error, info, warn};
+use log::{debug, error, info, warn};
 
 impl DingTalkStream {
     /// Start the client and run forever (auto-reconnect)

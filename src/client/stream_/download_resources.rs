@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use std::ops::Deref;
 use std::path::PathBuf;
-use tracing::info;
+use log::info;
 use url::Url;
 
 #[async_trait]

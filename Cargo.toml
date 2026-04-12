@@ -1,22 +1,26 @@
 [package]
 name = "dingtalk-stream-sdk"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "DingTalk Stream SDK for Rust"
 license = "MIT"
 authors = ["DingTalk"]
 repository = "https://github.com/wenhaozhao/dingtalk-stream-sdk-rust"
 
+
+[lib]
+name = "dingtalk_stream"
+path = "src/lib.rs"
+
 [dependencies]
+log = { version = "0.4" }
 anyhow = { version = "1.0" }
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+tokio = { version = "1.51", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["rustls"] }
 futures-util = "0.3"
 reqwest = { version = "0.11", features = ["json", "rustls-tls", "multipart", "stream"], default-features = false }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 url = { version = "2.5" }
 async-trait = "0.1"
 chrono = { version = "0.4" }
@@ -24,15 +28,11 @@ md5 = { version = "0.8" }
 image = { version = "0.25", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full", "test-util"] }
+env_logger = { version = "0.11" }
 
 [features]
-rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
-default = ["rustls-tls-native-roots"]
+default = []
 
-[lib]
-name = "dingtalk_stream"
-path = "src/lib.rs"
 
 [[example]]
 name = "hello"

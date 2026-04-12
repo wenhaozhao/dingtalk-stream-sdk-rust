@@ -3,7 +3,7 @@ use crate::frames::{SendMessageCallback, SendMessageCallbackData};
 use crate::{ROBOT_SEND_GROUP_MESSAGE, ROBOT_SEND_PRIVATE_MESSAGE};
 use anyhow::anyhow;
 use serde_json::json;
-use tracing::info;
+use log::info;
 
 impl super::DingTalkStream {
     pub async fn send_message<M: Into<RobotMessage>>(&self, message: M) -> crate::Result<()> {

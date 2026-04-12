@@ -116,7 +116,7 @@ impl CallbackHandler for RobotMessageHandler {
 #[tokio::main]
 async fn main() {
     // Initialize logging
-    tracing_subscriber::fmt::init();
+    env_logger::init();
 
     // Get credentials from environment variables
     let client_id =

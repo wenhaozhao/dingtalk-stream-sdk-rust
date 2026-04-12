@@ -1,41 +1,41 @@
 # DingTalk Stream SDK for Rust
 
-English | [简体中文](README.zh_cn.md)
+[English](README.md) | 简体中文
 
-A Rust implementation of the DingTalk Stream SDK.
+钉钉 Stream SDK 的 Rust 实现。
 
-## Features
+## 功能特性
 
-- WebSocket connection with auto-reconnect
-- `CALLBACK`, `EVENT`, and `SYSTEM` message handling
-- Automatic ACK responses
-- Async callback webhook replies (`WebhookMessage`)
-- Proactive robot messaging (private and group)
-- Callback file/image download (`DingtalkResource`)
-- Media upload (`DingTalkMedia`)
-- Access token caching and refresh
-- Lifecycle hooks (`LifecycleListener`)
+- WebSocket 长连接与自动重连
+- `CALLBACK` / `EVENT` / `SYSTEM` 三类消息处理
+- 自动 ACK 回执
+- 回调会话异步回复（`WebhookMessage`）
+- 机器人主动发消息（单聊、群聊）
+- 回调文件/图片下载（`DingtalkResource`）
+- 媒体上传（`DingTalkMedia`）
+- Access Token 自动缓存与续期
+- 生命周期事件监听（`LifecycleListener`）
 
-## Installation
+## 安装
 
 ```toml
 [dependencies]
 dingtalk-stream-sdk = "0.2"
 ```
 
-Optional image decoding support:
+如需启用图片解码能力：
 
 ```toml
 [dependencies]
 dingtalk-stream-sdk = { version = "0.2", features = ["image"] }
 ```
 
-## Environment Variables
+## 环境变量
 
 - `DINGTALK_CLIENT_ID`
 - `DINGTALK_CLIENT_SECRET`
 
-## Quick Start
+## 快速开始
 
 ```rust
 use async_trait::async_trait;
@@ -89,7 +89,7 @@ async fn main() -> dingtalk_stream::Result<()> {
 }
 ```
 
-See [examples/hello.rs](examples/hello.rs) for a full example.
+完整示例见 [examples/hello.rs](examples/hello.rs)。
 
 ## ClientConfig
 
@@ -107,13 +107,13 @@ let config = ClientConfig {
 let client = DingTalkStream::with_config(Credential::from_env(), config);
 ```
 
-## Topic Constants
+## 主题常量
 
 - `TOPIC_ROBOT`: `/v1.0/im/bot/messages/get`
 - `TOPIC_ROBOT_DELEGATE`: `/v1.0/im/bot/messages/delegate`
 - `TOPIC_CARD`: `/v1.0/card/instances/callback`
 
-## Send Robot Messages
+## 机器人主动发消息
 
 ```rust
 use dingtalk_stream::frames::up_message::robot_message::{RobotMessage, RobotPrivateMessage};
@@ -131,9 +131,9 @@ client
     .await?;
 ```
 
-## Download Callback Files/Images
+## 下载回调中的文件/图片
 
-`PayloadPicture` and `PayloadFile` implement `DingtalkResource`:
+`PayloadPicture` 和 `PayloadFile` 均实现了 `DingtalkResource`：
 
 ```rust
 use dingtalk_stream::client::DingtalkResource;
@@ -142,7 +142,7 @@ let (path, _resource) = picture_payload.fetch(client.as_ref(), "/tmp".into()).aw
 println!("saved to: {}", path.display());
 ```
 
-## Upload Media
+## 上传媒体
 
 ```rust
 use dingtalk_stream::client::{DingTalkMedia, MediaImage};
@@ -153,9 +153,9 @@ let result = media.upload(client.as_ref()).await?;
 println!("upload: errcode={}, errmsg={}", result.errcode, result.errmsg);
 ```
 
-## Lifecycle Listener
+## 生命周期监听
 
-Implement `LifecycleListener` and register it via `register_lifecycle_listener(...)` to observe events such as:
+实现 `LifecycleListener` 并通过 `register_lifecycle_listener(...)` 注册后，可监听以下事件：
 
 - `Start`
 - `Connecting`

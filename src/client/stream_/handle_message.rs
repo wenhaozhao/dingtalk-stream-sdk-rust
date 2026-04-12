@@ -14,7 +14,7 @@ use anyhow::anyhow;
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use tracing::{debug, error, info, warn};
+use log::{debug, error, info, warn};
 
 impl DingTalkStream {
     /// Handle incoming message
