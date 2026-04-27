@@ -94,7 +94,7 @@ impl DingtalkResource for PayloadVideo {
             return Err(anyhow!("save_to_dir is a file"));
         }
         let filepath = save_to_dir.join(format!(
-            "{}_{}",
+            "{}.{}",
             format!("{:x}", md5::compute(&self.download_code)),
             self.video_type
         ));
