@@ -1,3 +1,4 @@
+use crate::frames::down_message::{DownStreamMessage, MessageHeaders};
 use crate::frames::{DingTalkGroupConversationId, DingTalkPrivateConversationId, DingTalkUserId};
 use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
@@ -7,7 +8,6 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::time::Duration;
-use crate::frames::down_message::{DownStreamMessage, MessageHeaders};
 
 /// Callback message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +160,8 @@ pub enum MessagePayload {
     Text { text: PayloadText },
     #[serde(rename = "picture")]
     Picture { content: PayloadPicture },
+    #[serde(rename = "video")]
+    Video { content: PayloadVideo },
     #[serde(rename = "file")]
     File { content: PayloadFile },
     #[serde(rename = "richText")]
@@ -192,6 +194,16 @@ pub struct PayloadPicture {
     pub download_code: String,
     #[serde(rename = "pictureDownloadCode")]
     pub picture_download_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadVideo {
+    #[serde(rename = "downloadCode")]
+    pub download_code: String,
+    #[serde(rename = "duration")]
+    pub duration: String,
+    #[serde(rename = "videoType")]
+    pub video_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

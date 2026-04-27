@@ -1,11 +1,11 @@
-use crate::frames::down_message::callback_message::{PayloadFile, PayloadPicture};
+use crate::frames::down_message::callback_message::{PayloadFile, PayloadPicture, PayloadVideo};
 use crate::DingTalkStream;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use log::info;
 use serde_json::json;
 use std::ops::Deref;
 use std::path::PathBuf;
-use log::info;
 use url::Url;
 
 #[async_trait]
@@ -75,6 +75,48 @@ impl DingtalkResource for PayloadPicture {
         };
         info!("Downloaded image to {}", filepath.display());
         Ok((filepath, image))
+    }
+}
+
+#[async_trait]
+impl DingtalkResource for PayloadVideo {
+    type T = Vec<u8>;
+
+    async fn fetch(
+        &self,
+        dingtalk: &DingTalkStream,
+        save_to_dir: PathBuf,
+    ) -> crate::Result<(PathBuf, Self::T)> {
+        if !save_to_dir.exists() {
+            tokio::fs::create_dir_all(&save_to_dir).await?;
+        }
+        if save_to_dir.is_file() {
+            return Err(anyhow!("save_to_dir is a file"));
+        }
+        let filepath = save_to_dir.join(format!(
+            "{}_{}",
+            format!("{:x}", md5::compute(&self.download_code)),
+            self.video_type
+        ));
+        if filepath.exists() {
+            let bytes = tokio::fs::read(&filepath).await?;
+            return Ok((filepath, bytes));
+        }
+        let download_url = fetch_download_url(dingtalk, &self.download_code).await?;
+        let bytes = dingtalk
+            .http_client
+            .get(download_url)
+            .send()
+            .await?
+            .bytes()
+            .await?;
+        tokio::fs::write(&filepath, bytes.as_ref()).await?;
+        info!(
+            "Downloaded {} video to {}",
+            self.download_code,
+            filepath.display()
+        );
+        Ok((filepath, bytes.to_vec()))
     }
 }
 
