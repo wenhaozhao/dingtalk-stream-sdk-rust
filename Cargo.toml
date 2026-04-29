@@ -1,6 +1,6 @@
 [package]
 name = "dingtalk-stream-sdk"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "DingTalk Stream SDK for Rust"
 license = "MIT"
