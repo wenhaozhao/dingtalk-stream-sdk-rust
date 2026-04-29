@@ -2,7 +2,9 @@ use crate::frames::down_message::{DownStreamMessage, MessageHeaders};
 use crate::frames::{DingTalkGroupConversationId, DingTalkPrivateConversationId, DingTalkUserId};
 use anyhow::anyhow;
 use chrono::{TimeZone, Utc};
-use serde::{Deserialize, Serialize};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -162,6 +164,8 @@ pub enum MessagePayload {
     Picture { content: PayloadPicture },
     #[serde(rename = "video")]
     Video { content: PayloadVideo },
+    #[serde(rename = "audio")]
+    Audio { content: PayloadAudio },
     #[serde(rename = "file")]
     File { content: PayloadFile },
     #[serde(rename = "richText")]
@@ -204,6 +208,46 @@ pub struct PayloadVideo {
     pub duration: String,
     #[serde(rename = "videoType")]
     pub video_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadAudio {
+    #[serde(rename = "downloadCode")]
+    pub download_code: String,
+    #[serde(rename = "recognition")]
+    pub recognition: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContentDuration(Duration);
+
+impl<'de> Deserialize<'de> for ContentDuration {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let json = Value::deserialize(deserializer)?;
+        let millis = match json {
+            Value::Number(val) => val
+                .as_u64()
+                .ok_or(D::Error::custom(format!("expected u64, but got {}", val))),
+            Value::String(val) => val
+                .parse::<u64>()
+                .map_err(|err| D::Error::custom(format!("{err}"))),
+            _ => Err(D::Error::custom(format!("unexpected val: {}", json))),
+        }?;
+        Ok(Self(Duration::from_millis(millis)))
+    }
+}
+
+impl Serialize for ContentDuration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let val = self.0.as_millis() as u64;
+        val.to_string().serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
